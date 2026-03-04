@@ -11,6 +11,15 @@ export function isSkipCandidate(text) {
   return false;
 }
 
+export const timecodeToSeconds = (tc) => {
+  if (!tc) return 0;
+  const [hms, ms] = tc.replace(',', '.').split(/[.,]/);
+  if (!hms) return 0;
+  const parts = hms.split(':').map(Number);
+  const h = parts[0] || 0, m = parts[1] || 0, s = parts[2] || 0;
+  return h * 3600 + m * 60 + s + (ms ? Number(ms) / 1000 : 0);
+};
+
 const API = 'http://localhost:8000';
 
 const useSubtiStore = create((set, get) => ({
@@ -57,6 +66,41 @@ const useSubtiStore = create((set, get) => ({
   }),
   selectAllVisible: (ids) => set({ selectedSegIds: new Set(ids) }),
   clearSelection: () => set({ selectedSegIds: new Set() }),
+
+  replaceText: async (findVal, replaceVal, isRegex, matchWord) => {
+    const { segments, currentProject, prepareUndo } = get();
+    if (!findVal) return 0;
+
+    let regex;
+    try {
+      let pattern = isRegex ? findVal : findVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (matchWord) pattern = `\\b${pattern}\\b`;
+      regex = new RegExp(pattern, 'g');
+    } catch {
+      return 0; // invalid regex
+    }
+
+    const toUpdate = segments.filter(seg => seg.translation && regex.test(seg.translation));
+    if (toUpdate.length === 0) return 0;
+
+    let updatedCount = 0;
+    for (const seg of toUpdate) {
+      prepareUndo(seg.id);
+      const newText = seg.translation.replace(regex, replaceVal);
+      if (newText === seg.translation) continue;
+
+      const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${seg.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ translation: newText }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set(state => ({ segments: state.segments.map(s => s.id === seg.id ? updated : s) }));
+        updatedCount++;
+      }
+    }
+    return updatedCount;
+  },
 
   undoAction: async (targetSegId = null) => {
     const { undoStack, segments, currentProject } = get();

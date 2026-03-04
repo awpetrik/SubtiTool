@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Flag, Check, Edit2, Eye } from 'lucide-react';
-import useSubtiStore from '../store/useSubtiStore';
+import useSubtiStore, { timecodeToSeconds } from '../store/useSubtiStore';
 import FlagModal from './FlagModal';
 
 const STATUS_CFG = {
@@ -47,6 +47,16 @@ export default memo(function SubtitleRow({ seg }) {
     const cfg = STATUS_CFG[seg.status] || STATUS_CFG.pending;
     const isSkipped = seg.status === 'skipped';
 
+    // QC Metrics
+    const duration = timecodeToSeconds(seg.timecode_end) - timecodeToSeconds(seg.timecode_start);
+    const activeText = isEditing ? editValue : seg.translation || '';
+    const textLen = activeText.replace(/<[^>]*>/gi, '').length;
+    const origLen = (seg.original || '').replace(/<[^>]*>/gi, '').length;
+
+    const cps = duration > 0 ? (textLen / duration) : 0;
+    const isCpsDanger = cps > 17;
+    const isLenDanger = origLen > 0 && (textLen / origLen) > 1.5;
+
     return (
         <>
             <div
@@ -56,18 +66,31 @@ export default memo(function SubtitleRow({ seg }) {
                     display: 'flex', alignItems: 'flex-start', gap: 12,
                     padding: '10px 16px', borderBottom: '1px solid #141416',
                     cursor: 'pointer', transition: 'background 0.1s',
-                    background: isSelected ? 'var(--blue-dim)' : isActive ? 'rgba(245,158,11,0.05)' : 'transparent',
-                    borderLeft: isActive ? '2px solid var(--amber)' : isSelected ? '2px solid var(--blue)' : '2px solid transparent',
+                    background: isSelected ? 'var(--blue-dim)' : isActive ? 'rgba(245,158,11,0.05)' : isLenDanger && !isSkipped ? 'rgba(239,68,68,0.02)' : 'transparent',
+                    borderLeft: isActive ? '2px solid var(--amber)' : isSelected ? '2px solid var(--blue)' : isLenDanger && !isSkipped ? '2px solid rgba(239,68,68,0.5)' : '2px solid transparent',
                     opacity: isSkipped ? 0.45 : 1,
                 }}
             >
                 {/* Index */}
                 <span style={{ width: 36, color: 'var(--text-muted)', paddingTop: 2, flexShrink: 0 }}>{seg.index}</span>
 
-                {/* Timecode */}
-                <span style={{ width: 160, color: '#555', fontSize: 11, paddingTop: 2, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    {seg.timecode_start}<br />{seg.timecode_end}
-                </span>
+                {/* Timecode & QC Metric */}
+                <div style={{ width: 160, display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 2, flexShrink: 0 }}>
+                    <span style={{ color: '#555', fontSize: 11, whiteSpace: 'nowrap' }}>
+                        {seg.timecode_start}<br />{seg.timecode_end}
+                    </span>
+                    {textLen > 0 && !isSkipped && (
+                        <span title={`Kecepatan baca: ${cps.toFixed(1)} karakter per detik. (Maksimal ideal: 17)`} style={{
+                            fontSize: 10, fontWeight: 700,
+                            color: isCpsDanger ? 'var(--red)' : '#555',
+                            background: isCpsDanger ? 'rgba(239,68,68,0.1)' : 'transparent',
+                            padding: isCpsDanger ? '2px 6px' : '0',
+                            borderRadius: 3, width: 'fit-content'
+                        }}>
+                            {cps.toFixed(1)} CPS
+                        </span>
+                    )}
+                </div>
 
                 {/* Original */}
                 <div style={{ flex: 1 }}>

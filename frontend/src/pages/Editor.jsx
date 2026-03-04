@@ -6,6 +6,7 @@ import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
 import { Hexagon, HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp } from 'lucide-react';
 import SubSourceModal from '../components/SubSourceModal';
+import FindReplaceModal from '../components/FindReplaceModal';
 
 const API = 'http://localhost:8000';
 
@@ -71,6 +72,8 @@ export default function EditorPage() {
     useEffect(() => { if (id) loadProject(parseInt(id)); }, [id]);
 
     const [showShortcuts, setShowShortcuts] = useState(false);
+    const [showFindReplace, setShowFindReplace] = useState(false);
+
     const lastKeyRef = useRef('');
 
     const stats = getStats();
@@ -93,6 +96,12 @@ export default function EditorPage() {
     // Handle global keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
+                e.preventDefault();
+                setShowFindReplace(true);
+                return;
+            }
+
             const {
                 editingId, startEdit, toggleSelection, selectAllVisible,
                 clearSelection, undoAction, approveSelected, approve,
@@ -542,6 +551,7 @@ export default function EditorPage() {
                                     <li><kbd style={kbd}>A</kbd> <span style={{ float: 'right' }}>Approve row</span></li>
                                     <li><kbd style={kbd}>F</kbd> <span style={{ float: 'right' }}>Flag for review</span></li>
                                     <li><kbd style={kbd}>R</kbd> <span style={{ float: 'right' }}>Re-translate</span></li>
+                                    <li><kbd style={kbd}>Ctrl+H</kbd> <span style={{ float: 'right' }}>Global Find/Replace</span></li>
                                     <li><kbd style={kbd}>U</kbd> <span style={{ float: 'right' }}>Undo current row</span></li>
                                     <li><kbd style={kbd}>Ctrl+Z</kbd> <span style={{ float: 'right' }}>Global Undo</span></li>
                                 </ul>
@@ -569,6 +579,8 @@ export default function EditorPage() {
                     <ArrowUp size={22} />
                 </button>
             )}
+
+            {showFindReplace && <FindReplaceModal onClose={() => setShowFindReplace(false)} />}
         </div>
     );
 }
