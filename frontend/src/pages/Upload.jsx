@@ -3,15 +3,23 @@ import { useNavigate } from 'react-router-dom';
 
 const API = 'http://localhost:8000';
 
-// Strip common release tags dari nama file
-const RELEASE_TAGS = /\b(1080p|720p|480p|2160p|4K|AMZN|WEB[\-.]?DL|WEBDL|WEBRip|BluRay|BDRip|DVDRip|DDP?\d*|Atmos|H\.?264|H\.?265|HEVC|HDR|SDR|DTS|AAC|x264|x265|NF|HULU|DSNP|ATVP|MAX|PCOK)\b\.?/gi;
+// Strip release tags — jalankan SEBELUM replace titik agar H.264, WEB.DL match benar
+const RELEASE_TAGS = /[._-](1080p|720p|480p|2160p|4K|AMZN|WEB[_.-]?DL|WEBDL|WEBRip|BluRay|BDRip|DVDRip|DDP?[\d.]*|Atmos|H[._]?264|H[._]?265|HEVC|HDR10?[+]?|SDR|DTS[-.]?HD|DTS|AAC[\d.]*|x264|x265|NF|HULU|DSNP|ATVP|MAX|PCOK|REPACK|PROPER|IMAX|REMUX)(?=[._-]|$)/gi;
 
 function parseTitle(filename) {
-    return filename
-        .replace(/\.(srt|txt)$/i, '')
-        .replace(/\./g, ' ')
-        .replace(/_/g, ' ')
-        .replace(RELEASE_TAGS, '')
+    let name = filename.replace(/\.(srt|txt)$/i, '');
+
+    // Loop sampai tidak ada tag tersisa (beberapa tag bisa bersambung)
+    let prev = '';
+    while (prev !== name) {
+        prev = name;
+        name = name.replace(RELEASE_TAGS, '');
+    }
+
+    return name
+        .replace(/[._-]+/g, ' ')       // sisa titik/underscore/dash jadi spasi
+        .replace(/\s\d+\s*$/, '')      // hapus angka tunggal di akhir (sisa DDP5.1)
+        .replace(/\s[A-Z]\s/g, ' ')    // hapus huruf kapital tunggal di tengah
         .replace(/\s{2,}/g, ' ')
         .trim();
 }

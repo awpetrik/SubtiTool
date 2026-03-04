@@ -118,7 +118,27 @@ async def start_translate(
     return {"job_id": job_id, "project_id": project.id, "total": len(segments_data)}
 
 
-async def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key):
+def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key):
+    """Sync wrapper — dijalankan di thread pool oleh BackgroundTasks.
+    Membuat event loop baru agar aman dari konflik dengan main event loop uvicorn.
+    """
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(
+            _run_translate_job_async(job_id, project_id, segments_data, context, engine_name, gemini_key)
+        )
+    except Exception as e:
+        print(f"[translate job CRASH] {e}", flush=True)
+        if job_id in _jobs:
+            _jobs[job_id]["status"] = "error"
+            _jobs[job_id]["error"] = str(e)
+    finally:
+        loop.close()
+
+
+async def _run_translate_job_async(job_id, project_id, segments_data, context, engine_name, gemini_key):
     from db import SessionLocal
     db = SessionLocal()
     job = _jobs[job_id]
@@ -137,7 +157,6 @@ async def _run_translate_job(job_id, project_id, segments_data, context, engine_
 
     try:
         all_translated: list[str] = []
-        # Translate in batches, update progress per batch
         for i in range(0, len(lines), BATCH_SIZE):
             context_start = max(0, i - OVERLAP)
             batch_lines = lines[context_start: i + BATCH_SIZE]
@@ -147,7 +166,7 @@ async def _run_translate_job(job_id, project_id, segments_data, context, engine_
                 translated = translated[OVERLAP:]
             all_translated.extend(translated)
 
-            # Update DB
+            # Update DB per batch
             for idx_offset, trans in enumerate(translated):
                 seg_index = (len(all_translated) - len(translated)) + idx_offset
                 if seg_index >= len(segments_data):
@@ -161,9 +180,12 @@ async def _run_translate_job(job_id, project_id, segments_data, context, engine_
             db.commit()
             job["processed"] = min(len(all_translated), len(lines))
             job["logs"].append(f"Batch {i//BATCH_SIZE + 1}: {job['processed']}/{job['total']} baris selesai")
+            print(f"[translate] project={project_id} {job['processed']}/{job['total']}", flush=True)
 
         job["status"] = "done"
+        print(f"[translate] project={project_id} DONE", flush=True)
     except Exception as e:
+        print(f"[translate] project={project_id} ERROR: {e}", flush=True)
         job["status"] = "error"
         job["error"] = str(e)
     finally:
