@@ -1,55 +1,54 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Hexagon, Edit3, Zap, Sparkles, Lock,
     XCircle, CheckCircle2, FileText, AlertTriangle,
-    Circle, Loader2, RotateCcw
+    Circle, Loader2, RotateCcw, ArrowRight, UploadCloud
 } from 'lucide-react';
 
 const API = 'http://localhost:8000';
 
-// Strip release tags — jalankan SEBELUM replace titik agar H.264, WEB.DL match benar
 const RELEASE_TAGS = /[._-](1080p|720p|480p|2160p|4K|AMZN|WEB[_.-]?DL|WEBDL|WEBRip|BluRay|BDRip|DVDRip|DDP?[\d.]*|Atmos|H[._]?264|H[._]?265|HEVC|HDR10?[+]?|SDR|DTS[-.]?HD|DTS|AAC[\d.]*|x264|x265|NF|HULU|DSNP|ATVP|MAX|PCOK|REPACK|PROPER|IMAX|REMUX)(?=[._-]|$)/gi;
 
 function parseTitle(filename) {
     let name = filename.replace(/\.(srt|txt)$/i, '');
-
-    // Loop sampai tidak ada tag tersisa (beberapa tag bisa bersambung)
     let prev = '';
     while (prev !== name) {
         prev = name;
         name = name.replace(RELEASE_TAGS, '');
     }
-
     return name
-        .replace(/[._-]+/g, ' ')       // sisa titik/underscore/dash jadi spasi
-        .replace(/\s\d+\s*$/, '')      // hapus angka tunggal di akhir (sisa DDP5.1)
-        .replace(/\s[A-Z]\s/g, ' ')    // hapus huruf kapital tunggal di tengah
+        .replace(/[._-]+/g, ' ')
+        .replace(/\s\d+\s*$/, '')
+        .replace(/\s[A-Z]\s/g, ' ')
         .replace(/\s{2,}/g, ' ')
         .trim();
 }
 
 const ENGINES = [
-    { value: 'manual', label: <><Edit3 size={14} style={{ marginRight: 6, marginBottom: -2 }} /> Manual</>, desc: 'Upload SRT, terjemahkan sendiri di editor' },
-    { value: 'google_free', label: <><Zap size={14} style={{ marginRight: 6, marginBottom: -2 }} /> Google Free</>, desc: 'Tanpa API key, cepat, gratis' },
-    { value: 'gemini', label: <><Sparkles size={14} style={{ marginRight: 6, marginBottom: -2 }} /> Gemini AI</>, desc: 'Kontekstual, kualitas terbaik' },
-    { value: 'libretranslate', label: <><Lock size={14} style={{ marginRight: 6, marginBottom: -2 }} /> LibreTranslate</>, desc: 'Self-hosted, offline / private' },
+    { value: 'manual', icon: <Edit3 size={12} />, label: 'Manual' },
+    { value: 'google_free', icon: <Zap size={12} />, label: 'Google Free' },
+    { value: 'gemini', icon: <Sparkles size={12} />, label: 'Gemini AI' },
+    { value: 'libretranslate', icon: <Lock size={12} />, label: 'LibreTranslate' },
 ];
 
 const LANG_FROM_OPTIONS = [
-    { value: 'en', label: 'English' },
-    { value: 'ja', label: 'Japanese' },
-    { value: 'ko', label: 'Korean' },
-    { value: 'zh', label: 'Chinese' },
-    { value: 'es', label: 'Spanish' },
-    { value: 'fr', label: 'French' },
+    { value: 'en', label: 'English' }, { value: 'ja', label: 'Japanese' },
+    { value: 'ko', label: 'Korean' }, { value: 'zh', label: 'Chinese' },
+    { value: 'es', label: 'Spanish' }, { value: 'fr', label: 'French' },
 ];
 const LANG_TO_OPTIONS = [
-    { value: 'id', label: 'Indonesia' },
-    { value: 'en', label: 'English' },
-    { value: 'ms', label: 'Melayu' },
-    { value: 'ja', label: 'Japanese' },
+    { value: 'id', label: 'Indonesia' }, { value: 'en', label: 'English' },
+    { value: 'ms', label: 'Melayu' }, { value: 'ja', label: 'Japanese' },
     { value: 'ko', label: 'Korean' },
+];
+
+const TIPS = [
+    "Gunakan J/K untuk navigasi cepat di editor.",
+    "Tekan S untuk skip baris lirik otomatis (di editor).",
+    "Gunakan Ctrl+H untuk Find & Replace global.",
+    "Batas nyaman membaca adalah maksimal 17 CPS (Characters Per Second).",
+    "Pintasan Shift+S bisa mereplace semua kandidat lirik/SFX serentak."
 ];
 
 export default function UploadPage() {
@@ -57,6 +56,7 @@ export default function UploadPage() {
     const fileRef = useRef(null);
 
     const [file, setFile] = useState(null);
+    const [lineCount, setLineCount] = useState(0);
     const [dragOver, setDragOver] = useState(false);
     const [fileError, setFileError] = useState('');
 
@@ -68,7 +68,7 @@ export default function UploadPage() {
     const [engine, setEngine] = useState('google_free');
     const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_key') || '');
     const [libreUrl, setLibreUrl] = useState(localStorage.getItem('libre_url') || 'http://localhost:5000');
-    const [libreStatus, setLibreStatus] = useState('idle'); // idle | testing | ok | fail
+    const [libreStatus, setLibreStatus] = useState('idle');
 
     const [skipLyrics, setSkipLyrics] = useState(true);
     const [skipSfx, setSkipSfx] = useState(true);
@@ -77,18 +77,32 @@ export default function UploadPage() {
     const [progress, setProgress] = useState({ processed: 0, total: 0, logs: [] });
     const [submitError, setSubmitError] = useState('');
 
-    // ── File handling ──────────────────────────────────────────────
+    const [tipIdx, setTipIdx] = useState(0);
+
+    useEffect(() => {
+        const t = setInterval(() => setTipIdx(i => (i + 1) % TIPS.length), 4000);
+        return () => clearInterval(t);
+    }, []);
+
     const handleFile = useCallback((f) => {
         setFileError('');
         if (!f) return;
         if (!f.name.toLowerCase().endsWith('.srt')) {
             setFileError('Hanya file .srt yang diterima.');
             setFile(null);
+            setLineCount(0);
             return;
         }
         setFile(f);
-        const autoTitle = parseTitle(f.name);
-        setForm(prev => ({ ...prev, title: prev.title || autoTitle }));
+        setForm(prev => ({ ...prev, title: prev.title || parseTitle(f.name) }));
+
+        // Count lines roughly
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const blocks = e.target.result.trim().split(/\r?\n\r?\n/);
+            setLineCount(blocks.length);
+        };
+        reader.readAsText(f);
     }, []);
 
     const handleDrop = (e) => {
@@ -97,7 +111,6 @@ export default function UploadPage() {
         handleFile(e.dataTransfer.files[0]);
     };
 
-    // ── LibreTranslate connection test ────────────────────────────
     const testLibre = async () => {
         setLibreStatus('testing');
         try {
@@ -108,7 +121,6 @@ export default function UploadPage() {
         }
     };
 
-    // ── Submit validation ──────────────────────────────────────────
     const isSubmitDisabled =
         !file ||
         phase === 'translating' ||
@@ -117,10 +129,8 @@ export default function UploadPage() {
 
     const isManual = engine === 'manual';
 
-    // ── SSE progress listener ──────────────────────────────────────
     const listenProgress = (jobId, projectId) => {
         const es = new EventSource(`${API}/api/translate/${jobId}/progress`);
-
         es.addEventListener('progress', (e) => {
             const p = new URLSearchParams(e.data);
             setProgress(prev => ({
@@ -129,7 +139,6 @@ export default function UploadPage() {
                 total: parseInt(p.get('total') || '0'),
             }));
         });
-
         es.addEventListener('done', (e) => {
             const p = new URLSearchParams(e.data);
             es.close();
@@ -140,13 +149,9 @@ export default function UploadPage() {
                 navigate(`/editor/${projectId}`);
             }
         });
-
         es.onmessage = (e) => {
-            if (e.data) {
-                setProgress(prev => ({ ...prev, logs: [...prev.logs, e.data] }));
-            }
+            if (e.data) setProgress(prev => ({ ...prev, logs: [...prev.logs, e.data] }));
         };
-
         es.onerror = () => {
             es.close();
             setPhase('error');
@@ -154,7 +159,6 @@ export default function UploadPage() {
         };
     };
 
-    // ── Submit ─────────────────────────────────────────────────────
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitError('');
@@ -185,7 +189,6 @@ export default function UploadPage() {
                 setSubmitError(data.detail || `Error ${res.status}`);
                 return;
             }
-            // Manual mode: job_id null → langsung ke editor
             if (!data.job_id) {
                 navigate(`/editor/${data.project_id}`);
                 return;
@@ -198,311 +201,262 @@ export default function UploadPage() {
         }
     };
 
-    const handleRetry = () => {
-        setPhase('idle');
-        setSubmitError('');
-        setProgress({ processed: 0, total: 0, logs: [] });
-    };
-
-    // ── Derived ────────────────────────────────────────────────────
     const pct = progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
 
     return (
-        <div style={s.root}>
-            {/* Logo */}
-            <div style={s.logoWrap}>
-                <div style={s.logo}>
-                    <Hexagon size={28} fill="currentColor" style={{ marginRight: 8, marginBottom: -4 }} />
-                    SubtiTool
+        <div className="upload-container">
+            <style>{`
+                .upload-container {
+                    display: flex; height: 100vh; overflow: hidden;
+                    background: var(--bg); color: var(--text);
+                }
+                .upload-left {
+                    width: 40%; background: #0c0c0e; border-right: 1px solid var(--border);
+                    display: flex; flexDirection: column; padding: 32px;
+                    justify-content: space-between;
+                }
+                .upload-right {
+                    width: 60%; display: flex; flexDirection: column; padding: 32px;
+                    overflow-y: auto; background: var(--bg);
+                }
+                .upload-form {
+                    display: flex; flexDirection: column; gap: 16px; height: 100%; maxWidth: 640px; margin: 0 auto; width: 100%;
+                }
+                .upload-label {
+                    font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+                    color: var(--amber); margin-bottom: 4px; display: block; font-weight: 700;
+                }
+                .upload-input {
+                    width: 100%; height: 36px; padding: 0 12px; background: var(--bg-1);
+                    border: 1px solid var(--border); color: #fff; border-radius: 4px;
+                    font-size: 13px; box-sizing: border-box; outline: none; transition: border 0.2s;
+                }
+                .upload-input:focus { border-color: var(--amber); }
+                .upload-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+                .engine-tabs {
+                    display: flex; gap: 4px; background: var(--bg-1); padding: 4px;
+                    border-radius: 6px; border: 1px solid var(--border);
+                }
+                .engine-tab {
+                    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+                    height: 32px; font-size: 11px; font-weight: 600; cursor: pointer;
+                    border-radius: 4px; transition: all 0.2s; border: none;
+                }
+                .engine-tab.active { background: var(--amber); color: #000; }
+                .engine-tab.inactive { background: transparent; color: var(--text-muted); }
+                .engine-tab.inactive:hover { background: var(--bg-2); color: var(--text); }
+                
+                @media (max-width: 768px) {
+                    .upload-container { flex-direction: column; height: auto; overflow: visible; }
+                    .upload-left, .upload-right { width: 100%; padding: 20px; }
+                    .upload-left { min-height: 50vh; border-right: none; border-bottom: 1px solid var(--border); }
+                    .upload-grid3 { grid-template-columns: 1fr; }
+                    .engine-tabs { flex-wrap: wrap; }
+                }
+
+                .drop-zone {
+                    flex: 1; border: 2px dashed var(--border); border-radius: 8px;
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
+                    cursor: pointer; transition: all 0.2s; text-align: center;
+                }
+                .drop-zone:hover { border-color: var(--amber); background: rgba(245,158,11,0.03); }
+                .drop-zone.active { border-color: var(--amber); background: rgba(245,158,11,0.08); }
+                .drop-zone.error { border-color: var(--red); background: rgba(239,68,68,0.05); }
+
+                .btn-submit {
+                    height: 44px; width: 100%; border: none; border-radius: 6px;
+                    font-size: 14px; font-weight: 800; font-family: var(--display);
+                    cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+                    position: relative; overflow: hidden;
+                }
+            `}</style>
+
+            {/* ── LEFT PANEL ── */}
+            <div className="upload-left">
+                <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                    <div style={{ fontSize: 28, color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                        <Hexagon size={24} fill="currentColor" /> SubtiTool
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 12 }}>Next-Gen AI Subtitle Workflow</p>
                 </div>
-                <p style={s.logoSub}>AI Subtitle Translator &amp; Editor</p>
+
+                {!file ? (
+                    <div
+                        className={`drop-zone ${dragOver ? 'active' : ''} ${fileError ? 'error' : ''}`}
+                        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={handleDrop}
+                        onClick={() => fileRef.current?.click()}
+                    >
+                        <input ref={fileRef} type="file" accept=".srt" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
+                        <UploadCloud size={40} color={fileError ? 'var(--red)' : 'var(--amber)'} style={{ marginBottom: 16, opacity: 0.8 }} />
+                        <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text)' }}>
+                            Drag & Drop file SRT ke area ini
+                        </p>
+                        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-dim)' }}>Atau klik untuk browse file dari komputer</p>
+                        {fileError && <p style={{ color: 'var(--red)', fontSize: 11, marginTop: 12, fontWeight: 600 }}>{fileError}</p>}
+                    </div>
+                ) : (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: 20, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                            <CheckCircle2 size={36} color="var(--green)" style={{ marginBottom: 12 }} />
+                            <h3 style={{ margin: '0 0 4px', fontSize: 14, color: 'var(--green)', textAlign: 'center', wordBreak: 'break-all' }}>{file.name}</h3>
+                            <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>
+                                <span>{(file.size / 1024).toFixed(1)} KB</span>
+                                <span>&bull;</span>
+                                <span>~{lineCount} baris</span>
+                            </div>
+                            <button onClick={() => { setFile(null); setFileError(''); }} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', transition: 'all 0.15s' }}>
+                                Ganti File SRT
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ marginTop: 20, textAlign: 'center', height: 20 }}>
+                    <p style={{ margin: 0, fontSize: 11, color: '#555', fontStyle: 'italic', transition: 'opacity 0.3s' }}>
+                        💡 Tip: {TIPS[tipIdx]}
+                    </p>
+                </div>
             </div>
 
-            <form onSubmit={handleSubmit} style={s.form}>
+            {/* ── RIGHT PANEL ── */}
+            <div className="upload-right">
+                <form className="upload-form" onSubmit={handleSubmit}>
 
-                {/* ── Drop Zone ── */}
-                <div
-                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                    onDragLeave={() => setDragOver(false)}
-                    onDrop={handleDrop}
-                    onClick={() => fileRef.current.click()}
-                    style={{
-                        ...s.dropzone,
-                        border: `2px dashed ${fileError ? 'var(--red)' : dragOver ? 'var(--amber)' : file ? 'var(--green)' : 'var(--border)'}`,
-                        background: dragOver ? 'var(--amber-dim)' : file ? 'rgba(16,185,129,0.05)' : 'var(--bg-1)',
-                    }}
-                >
-                    <input
-                        ref={fileRef} type="file" accept=".srt"
-                        style={{ display: 'none' }}
-                        onChange={e => handleFile(e.target.files[0])}
-                    />
-                    <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
-                        {fileError ? <XCircle size={32} color="var(--red)" /> :
-                            file ? <CheckCircle2 size={32} color="var(--green)" /> :
-                                <FileText size={32} color="var(--amber)" />}
+                    {/* Context Grid */}
+                    <div>
+                        <label className="upload-label">Konteks Film</label>
+                        <div className="upload-grid3">
+                            <input className="upload-input" placeholder="Judul (Mis. Breaking Bad S2E1)" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+                            <input className="upload-input" placeholder="Genre (Crime, Drama)" value={form.genre} onChange={e => setForm(f => ({ ...f, genre: e.target.value }))} />
+                            <input className="upload-input" placeholder="Karakter Utama (Walter, Jesse)" value={form.char_context} onChange={e => setForm(f => ({ ...f, char_context: e.target.value }))} />
+                        </div>
                     </div>
-                    {file ? (
-                        <>
-                            <p style={{ color: 'var(--green)', fontWeight: 700, margin: 0 }}>{file.name}</p>
-                            <p style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
-                                {(file.size / 1024).toFixed(1)} KB · klik untuk ganti file
-                            </p>
-                        </>
-                    ) : (
-                        <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-                            Drop file <strong style={{ color: 'var(--amber)' }}>.srt</strong> di sini atau klik untuk browse
-                        </p>
-                    )}
-                </div>
-                {fileError && <p style={s.inlineError}><AlertTriangle size={12} style={{ marginRight: 4, marginBottom: -2 }} /> {fileError}</p>}
 
-                {/* ── Konteks Film ── */}
-                <div style={s.card}>
-                    <p style={s.cardLabel}>KONTEKS FILM</p>
-                    <Field label="Judul">
-                        <input
-                            value={form.title}
-                            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                            placeholder="Breaking Bad S02E06"
-                            style={s.input}
-                        />
-                    </Field>
-                    <Field label="Genre">
-                        <input
-                            value={form.genre}
-                            onChange={e => setForm(f => ({ ...f, genre: e.target.value }))}
-                            placeholder="Crime Drama"
-                            style={s.input}
-                        />
-                    </Field>
-                    <Field label="Karakter Utama">
-                        <input
-                            value={form.char_context}
-                            onChange={e => setForm(f => ({ ...f, char_context: e.target.value }))}
-                            placeholder="Walter (tegang), Jesse (kasual)"
-                            style={s.input}
-                        />
-                    </Field>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                        <Field label="Dari">
-                            <select value={form.lang_from} onChange={e => setForm(f => ({ ...f, lang_from: e.target.value }))} style={s.input}>
+                    {/* Language Selector */}
+                    <div>
+                        <label className="upload-label">Bahasa Asal & Tujuan</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-1)', padding: 8, borderRadius: 6, border: '1px solid var(--border)' }}>
+                            <select className="upload-input" style={{ border: 'none', background: 'var(--bg-2)' }} value={form.lang_from} onChange={e => setForm(f => ({ ...f, lang_from: e.target.value }))}>
                                 {LANG_FROM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
-                        </Field>
-                        <Field label="Ke">
-                            <select value={form.lang_to} onChange={e => setForm(f => ({ ...f, lang_to: e.target.value }))} style={s.input}>
+                            <ArrowRight size={14} color="var(--text-muted)" />
+                            <select className="upload-input" style={{ border: 'none', background: 'var(--bg-2)' }} value={form.lang_to} onChange={e => setForm(f => ({ ...f, lang_to: e.target.value }))}>
                                 {LANG_TO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
-                        </Field>
-                    </div>
-                </div>
-
-                {/* ── Engine Selector ── */}
-                <div style={s.card}>
-                    <p style={s.cardLabel}>ENGINE TRANSLATE</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {ENGINES.map(eng => (
-                            <label key={eng.value} style={{
-                                ...s.engineOption,
-                                border: `1px solid ${engine === eng.value ? 'var(--amber)' : 'var(--border)'}`,
-                                background: engine === eng.value ? 'var(--amber-dim)' : 'transparent',
-                            }}>
-                                <input
-                                    type="radio" name="engine" value={eng.value}
-                                    checked={engine === eng.value}
-                                    onChange={() => setEngine(eng.value)}
-                                    style={{ accentColor: 'var(--amber)', marginTop: 2 }}
-                                />
-                                <div>
-                                    <div style={{ color: 'var(--text)', fontWeight: engine === eng.value ? 700 : 400 }}>{eng.label}</div>
-                                    <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{eng.desc}</div>
-                                </div>
-                            </label>
-                        ))}
-                    </div>
-
-                    {/* Gemini key input */}
-                    {engine === 'gemini' && (
-                        <div style={{ marginTop: 10 }}>
-                            <label style={s.subLabel}>Gemini API Key</label>
-                            <input
-                                value={geminiKey}
-                                onChange={e => setGeminiKey(e.target.value)}
-                                placeholder="AIza..."
-                                type="password"
-                                style={{ ...s.input, borderColor: !geminiKey.trim() ? 'var(--red)' : 'var(--border)' }}
-                            />
-                            {!geminiKey.trim() && (
-                                <p style={{ color: 'var(--red)', fontSize: 11, marginTop: 4 }}>
-                                    API key wajib diisi untuk engine Gemini.
-                                </p>
-                            )}
                         </div>
-                    )}
+                    </div>
 
-                    {/* LibreTranslate URL + test */}
-                    {engine === 'libretranslate' && (
-                        <div style={{ marginTop: 10 }}>
-                            <label style={s.subLabel}>LibreTranslate URL</label>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {/* Engine Selector */}
+                    <div>
+                        <label className="upload-label">Engine Terjemahan</label>
+                        <div className="engine-tabs">
+                            {ENGINES.map(eng => (
+                                <button
+                                    key={eng.value} type="button"
+                                    className={`engine-tab ${engine === eng.value ? 'active' : 'inactive'}`}
+                                    onClick={() => setEngine(eng.value)}
+                                >
+                                    {eng.icon} {eng.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Sub-options for Gemini */}
+                        {engine === 'gemini' && (
+                            <div style={{ marginTop: 8, background: 'rgba(245,158,11,0.05)', padding: '10px 12px', borderLeft: '2px solid var(--amber)', borderRadius: '0 4px 4px 0' }}>
                                 <input
-                                    value={libreUrl}
-                                    onChange={e => { setLibreUrl(e.target.value); setLibreStatus('idle'); }}
-                                    placeholder="http://localhost:5000"
-                                    style={{ ...s.input, flex: 1 }}
+                                    className="upload-input" type="password" placeholder="Gemini API Key (AIza...)"
+                                    value={geminiKey} onChange={e => setGeminiKey(e.target.value)}
+                                    style={{ height: 32, borderColor: !geminiKey.trim() ? 'var(--red)' : 'var(--border)' }}
                                 />
-                                <button type="button" onClick={testLibre} style={s.btnSecondary}>
+                                {!geminiKey.trim() && <p style={{ fontSize: 10, color: 'var(--red)', margin: '4px 0 0' }}>API key wajib diisi untuk engine Gemini.</p>}
+                            </div>
+                        )}
+
+                        {/* Sub-options for LibreTranslate */}
+                        {engine === 'libretranslate' && (
+                            <div style={{ marginTop: 8, background: 'rgba(139,92,246,0.05)', padding: '10px 12px', borderLeft: '2px solid #8b5cf6', borderRadius: '0 4px 4px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <input
+                                    className="upload-input" placeholder="URL (http://localhost:5000)"
+                                    value={libreUrl} onChange={e => { setLibreUrl(e.target.value); setLibreStatus('idle'); }}
+                                    style={{ height: 32, flex: 1 }}
+                                />
+                                <button type="button" onClick={testLibre} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', color: 'var(--text)', padding: '0 12px', borderRadius: 4, height: 32, fontSize: 11, cursor: 'pointer' }}>
                                     {libreStatus === 'testing' ? '...' : 'Test'}
                                 </button>
                                 {libreStatus === 'ok' && <Circle size={10} fill="var(--green)" color="var(--green)" />}
                                 {libreStatus === 'fail' && <Circle size={10} fill="var(--red)" color="var(--red)" />}
                             </div>
-                            {libreStatus === 'fail' && (
-                                <p style={{ color: 'var(--red)', fontSize: 11, marginTop: 4 }}>
-                                    Tidak bisa terhubung ke LibreTranslate. Pastikan server berjalan.
-                                </p>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                {/* ── Auto-Skip Config ── */}
-                <div style={s.card}>
-                    <p style={s.cardLabel}>AUTO-SKIP (HEMAT WAKTU & API)</p>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={skipLyrics} onChange={e => setSkipLyrics(e.target.checked)} style={{ accentColor: 'var(--amber)', width: 16, height: 16 }} />
-                        <span style={{ color: skipLyrics ? 'var(--text)' : 'inherit' }}>Auto-skip baris lirik (♪)</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer', marginTop: 4 }}>
-                        <input type="checkbox" checked={skipSfx} onChange={e => setSkipSfx(e.target.checked)} style={{ accentColor: 'var(--amber)', width: 16, height: 16 }} />
-                        <span style={{ color: skipSfx ? 'var(--text)' : 'inherit' }}>Auto-skip sound effects ([Music], [Applause])</span>
-                    </label>
-                    <p style={{ margin: '6px 0 0 26px', fontSize: 11, color: '#555' }}>
-                        Baris tidak akan dikirim ke AI dan status ditandai `skipped`.
-                    </p>
-                </div>
-
-                {/* ── Progress (saat translating) ── */}
-                {phase === 'translating' && (
-                    <div style={s.progBox}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                            <span style={{ color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <Loader2 size={16} /> Translating...
-                            </span>
-                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                                {progress.processed} / {progress.total} baris ({pct}%)
-                            </span>
-                        </div>
-                        <div style={s.progTrack}>
-                            <div style={{ ...s.progFill, width: `${pct}%` }} />
-                        </div>
-                        {progress.logs.length > 0 && (
-                            <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: 11 }}>
-                                {progress.logs[progress.logs.length - 1]}
-                            </p>
                         )}
                     </div>
-                )}
 
-                {/* ── Error state ── */}
-                {phase === 'error' && (
-                    <div style={s.errorBox}>
-                        <p style={{ margin: '0 0 10px', color: 'var(--red)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <AlertTriangle size={16} /> Terjemahan Gagal
-                        </p>
-                        <p style={{ margin: '0 0 14px', color: 'var(--text-dim)', fontSize: 12 }}>{submitError}</p>
-                        <button type="button" onClick={handleRetry} style={s.btnRetry}>
-                            <RotateCcw size={14} style={{ marginRight: 6, marginBottom: -2 }} /> Coba Lagi
-                        </button>
+                    {/* Auto-Skip Configuration */}
+                    <div>
+                        <label className="upload-label">Auto-Skip (Hemat API / Waktu)</label>
+                        <div style={{ display: 'flex', gap: 20, background: 'var(--bg-1)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+                                <input type="checkbox" checked={skipLyrics} onChange={e => setSkipLyrics(e.target.checked)} style={{ accentColor: 'var(--amber)', width: 14, height: 14 }} />
+                                Skip baris nyanyian (♪)
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+                                <input type="checkbox" checked={skipSfx} onChange={e => setSkipSfx(e.target.checked)} style={{ accentColor: 'var(--amber)', width: 14, height: 14 }} />
+                                Skip Sound Effects ([Music])
+                            </label>
+                        </div>
                     </div>
-                )}
 
-                {/* ── Submit button ── */}
-                {phase === 'idle' && (
+                    {/* Spacer to push submit button down */}
+                    <div style={{ flex: 1 }} />
+
+                    {/* Error Box */}
+                    {phase === 'error' && (
+                        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', padding: '10px 14px', borderRadius: 6, color: 'var(--red)', fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <AlertTriangle size={14} /> {submitError}
+                            </div>
+                            <button type="button" onClick={() => { setPhase('idle'); setSubmitError(''); }} style={{ background: 'var(--red)', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer' }}>
+                                Retry
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Submit Button Area */}
                     <button
-                        type="submit"
+                        type={phase === 'idle' ? 'submit' : 'button'}
                         disabled={isSubmitDisabled}
+                        className="btn-submit"
                         style={{
-                            ...s.btnSubmit,
-                            opacity: isSubmitDisabled ? 0.45 : 1,
-                            cursor: isSubmitDisabled ? 'not-allowed' : 'pointer',
-                            background: isManual ? '#374151' : 'var(--amber)',
-                            color: isManual ? '#e5e7eb' : '#000',
+                            background: phase === 'translating' ? 'var(--bg-2)' : (isManual ? '#4b5563' : 'var(--amber)'),
+                            color: phase === 'translating' ? 'var(--amber)' : (isManual ? '#fff' : '#000'),
+                            opacity: isSubmitDisabled ? 0.5 : 1,
+                            cursor: isSubmitDisabled ? 'not-allowed' : phase === 'translating' ? 'wait' : 'pointer'
                         }}
                     >
-                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                            {isManual ? <><Edit3 size={16} /> Upload & Edit Manual</> : <><Sparkles size={16} /> Mulai Translate</>}
-                        </span>
+                        {phase === 'translating' && (
+                            <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${pct}%`, background: 'rgba(245, 158, 11, 0.15)', transition: 'width 0.4s ease' }} />
+                        )}
+
+                        {phase === 'translating' ? (
+                            <><Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> Mentranslate... {progress.processed} / {progress.total} baris ({pct}%)</>
+                        ) : isManual ? (
+                            <><Edit3 size={16} /> Buka Editor →</>
+                        ) : (
+                            <><Sparkles size={16} /> Mulai Translate →</>
+                        )}
                     </button>
-                )}
-            </form>
+                    {phase === 'translating' && progress.logs.length > 0 && (
+                        <div style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-muted)', marginTop: -6 }}>
+                            {progress.logs[progress.logs.length - 1]}
+                        </div>
+                    )}
+                </form>
+            </div>
+            {/* Inline CSS Keyframes */}
+            <style>{`
+                @keyframes spin { 100% { transform: rotate(360deg); } }
+            `}</style>
         </div>
     );
 }
-
-function Field({ label, children }) {
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</label>
-            {children}
-        </div>
-    );
-}
-
-const s = {
-    root: {
-        minHeight: '100vh', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '32px 16px', background: 'var(--bg)',
-    },
-    logoWrap: { marginBottom: 28, textAlign: 'center' },
-    logo: {
-        fontSize: 32, color: 'var(--amber)',
-        fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -1,
-    },
-    logoSub: { color: 'var(--text-muted)', marginTop: 6, fontSize: 13 },
-    form: { width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', gap: 14 },
-    dropzone: {
-        borderRadius: 8, padding: '28px 24px', textAlign: 'center',
-        cursor: 'pointer', transition: 'all 0.2s', userSelect: 'none',
-    },
-    inlineError: { color: 'var(--red)', fontSize: 12, margin: '-6px 0 0' },
-    card: {
-        background: 'var(--bg-1)', padding: 16, borderRadius: 6,
-        border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10,
-    },
-    cardLabel: { fontSize: 10, color: 'var(--amber)', letterSpacing: 1, margin: '0 0 2px' },
-    input: { width: '100%', boxSizing: 'border-box' },
-    subLabel: { fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 },
-    engineOption: {
-        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 12px',
-        borderRadius: 4, cursor: 'pointer', transition: 'all 0.15s',
-    },
-    progBox: {
-        background: 'var(--bg-1)', border: '1px solid var(--border)',
-        borderRadius: 6, padding: '14px 16px',
-    },
-    progTrack: { height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden' },
-    progFill: {
-        height: '100%', borderRadius: 3, background: 'var(--amber)',
-        transition: 'width 0.5s ease',
-    },
-    errorBox: {
-        background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
-        borderRadius: 6, padding: '14px 16px',
-    },
-    btnSubmit: {
-        background: 'var(--amber)', color: '#000', border: 'none',
-        padding: 13, borderRadius: 6, fontWeight: 800, fontSize: 14,
-        fontFamily: 'var(--display)', letterSpacing: 0.5, transition: 'opacity 0.15s',
-    },
-    btnSecondary: {
-        background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)',
-        padding: '6px 12px', borderRadius: 4, fontSize: 12, whiteSpace: 'nowrap',
-    },
-    btnRetry: {
-        background: 'none', border: '1px solid var(--red)', color: 'var(--red)',
-        padding: '7px 18px', borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-    },
-};
