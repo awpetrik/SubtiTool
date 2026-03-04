@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+import re
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
@@ -48,6 +49,8 @@ async def start_translate(
     lang_to: str = Form("id"),
     engine: str = Form("google_free"),
     gemini_api_key: str = Form(""),
+    skip_lyrics: str = Form("true"),
+    skip_sfx: str = Form("true"),
     db: Session = Depends(get_db),
 ):
     content = await file.read()
@@ -68,16 +71,43 @@ async def start_translate(
     db.commit()
     db.refresh(project)
 
+    is_skip_lyrics = skip_lyrics == "true"
+    is_skip_sfx = skip_sfx == "true"
+    
+    pending_segs_for_job = []
+
     for seg in segments_data:
+        text_clean = seg["original"].strip()
+        is_skipped = False
+        
+        if re.sub(r'[\W\d_]', '', text_clean) == "":
+            is_skipped = True
+            
+        if not is_skipped and is_skip_lyrics:
+            if text_clean.startswith("♪") or text_clean.endswith("♪") or text_clean.startswith("♫") or text_clean.endswith("♫"):
+                is_skipped = True
+                
+        if not is_skipped and is_skip_sfx:
+            if (text_clean.startswith("[") and text_clean.endswith("]")) or (text_clean.startswith("(") and text_clean.endswith(")")):
+                if ":" not in text_clean:
+                    is_skipped = True
+                    
+        status = "skipped" if is_skipped else "pending"
+        translation = text_clean if is_skipped else ""
+
         db.add(Segment(
             project_id=project.id,
             index=seg["index"],
             timecode_start=seg["timecode_start"],
             timecode_end=seg["timecode_end"],
             original=seg["original"],
-            translation="",
-            status="pending",
+            translation=translation,
+            status=status,
         ))
+        
+        if status == "pending":
+            pending_segs_for_job.append(seg)
+            
     db.commit()
 
     if engine == "manual":
@@ -88,7 +118,7 @@ async def start_translate(
         "project_id": project.id,
         "status": "running",
         "processed": 0,
-        "total": len(segments_data),
+        "total": len(pending_segs_for_job),
         "logs": [],
     }
 
@@ -96,7 +126,7 @@ async def start_translate(
         _run_translate_job,
         job_id=job_id,
         project_id=project.id,
-        segments_data=segments_data,
+        segments_data=pending_segs_for_job,
         context={"title": title, "genre": genre, "char_context": char_context,
                  "lang_from": lang_from, "lang_to": lang_to},
         engine_name=engine,

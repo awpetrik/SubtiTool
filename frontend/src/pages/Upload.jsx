@@ -70,6 +70,9 @@ export default function UploadPage() {
     const [libreUrl, setLibreUrl] = useState(localStorage.getItem('libre_url') || 'http://localhost:5000');
     const [libreStatus, setLibreStatus] = useState('idle'); // idle | testing | ok | fail
 
+    const [skipLyrics, setSkipLyrics] = useState(true);
+    const [skipSfx, setSkipSfx] = useState(true);
+
     const [phase, setPhase] = useState('idle'); // idle | translating | error
     const [progress, setProgress] = useState({ processed: 0, total: 0, logs: [] });
     const [submitError, setSubmitError] = useState('');
@@ -169,6 +172,8 @@ export default function UploadPage() {
         fd.append('lang_to', form.lang_to);
         fd.append('engine', engine);
         fd.append('gemini_api_key', engine === 'gemini' ? geminiKey : '');
+        fd.append('skip_lyrics', skipLyrics);
+        fd.append('skip_sfx', skipSfx);
 
         setPhase('translating');
 
@@ -360,6 +365,22 @@ export default function UploadPage() {
                             )}
                         </div>
                     )}
+                </div>
+
+                {/* ── Auto-Skip Config ── */}
+                <div style={s.card}>
+                    <p style={s.cardLabel}>AUTO-SKIP (HEMAT WAKTU & API)</p>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={skipLyrics} onChange={e => setSkipLyrics(e.target.checked)} style={{ accentColor: 'var(--amber)', width: 16, height: 16 }} />
+                        <span style={{ color: skipLyrics ? 'var(--text)' : 'inherit' }}>Auto-skip baris lirik (♪)</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer', marginTop: 4 }}>
+                        <input type="checkbox" checked={skipSfx} onChange={e => setSkipSfx(e.target.checked)} style={{ accentColor: 'var(--amber)', width: 16, height: 16 }} />
+                        <span style={{ color: skipSfx ? 'var(--text)' : 'inherit' }}>Auto-skip sound effects ([Music], [Applause])</span>
+                    </label>
+                    <p style={{ margin: '6px 0 0 26px', fontSize: 11, color: '#555' }}>
+                        Baris tidak akan dikirim ke AI dan status ditandai `skipped`.
+                    </p>
                 </div>
 
                 {/* ── Progress (saat translating) ── */}

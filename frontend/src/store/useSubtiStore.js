@@ -1,5 +1,16 @@
 import { create } from 'zustand';
 
+export function isSkipCandidate(text) {
+  if (!text) return false;
+  const clean = text.trim();
+  if (clean.replace(/[\W\d_]/g, '') === '') return true;
+  if (/^[♪♫]|[♪♫]$/.test(clean)) return true;
+  if ((clean.startsWith('[') && clean.endsWith(']')) || (clean.startsWith('(') && clean.endsWith(')'))) {
+    if (!clean.includes(':')) return true;
+  }
+  return false;
+}
+
 const API = 'http://localhost:8000';
 
 const useSubtiStore = create((set, get) => ({
@@ -148,6 +159,43 @@ const useSubtiStore = create((set, get) => ({
     }
   },
 
+  skipRow: async (segId) => {
+    const { currentProject, segments, prepareUndo } = get();
+    prepareUndo(segId);
+    const seg = segments.find(s => s.id === segId);
+    if (!seg) return;
+    const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'skipped', translation: seg.original }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+    }
+  },
+
+  bulkSkipCandidates: async () => {
+    const { segments, currentProject, prepareUndo } = get();
+    const candidates = segments.filter(s =>
+      s.status !== 'skipped' && s.status !== 'approved' && isSkipCandidate(s.original)
+    );
+    if (candidates.length === 0) return 0;
+
+    for (const c of candidates) {
+      prepareUndo(c.id);
+      const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${c.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'skipped', translation: c.original }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set(state => ({ segments: state.segments.map(s => s.id === c.id ? updated : s) }));
+      }
+    }
+    return candidates.length;
+  },
+
   submitFlag: async (segId, flagNote) => {
     const { currentProject, segments, prepareUndo } = get();
     prepareUndo(segId);
@@ -258,6 +306,7 @@ const useSubtiStore = create((set, get) => ({
       flagged: segments.filter(s => s.status === 'flagged').length,
       in_review: segments.filter(s => s.status === 'in_review').length,
       pending: segments.filter(s => s.status === 'pending').length,
+      skipped: segments.filter(s => s.status === 'skipped').length,
     };
   },
 }));

@@ -27,6 +27,7 @@ export default memo(function SubtitleRow({ seg }) {
     const setFlaggingId = useSubtiStore(state => state.setFlaggingId);
 
     const cfg = STATUS_CFG[seg.status] || STATUS_CFG.pending;
+    const isSkipped = seg.status === 'skipped';
 
     return (
         <>
@@ -39,6 +40,7 @@ export default memo(function SubtitleRow({ seg }) {
                     cursor: 'pointer', transition: 'background 0.1s',
                     background: isSelected ? 'var(--blue-dim)' : isActive ? 'rgba(245,158,11,0.05)' : 'transparent',
                     borderLeft: isActive ? '2px solid var(--amber)' : isSelected ? '2px solid var(--blue)' : '2px solid transparent',
+                    opacity: isSkipped ? 0.45 : 1,
                 }}
             >
                 {/* Index */}
@@ -70,7 +72,12 @@ export default memo(function SubtitleRow({ seg }) {
                                     e.preventDefault();
                                     saveEdit(seg.id);
                                     const all = useSubtiStore.getState().segments;
-                                    const next = all[all.findIndex(s => s.id === seg.id) + 1];
+                                    let nextIdx = all.findIndex(s => s.id === seg.id) + 1;
+                                    let next = null;
+                                    while (nextIdx < all.length) {
+                                        if (all[nextIdx].status !== 'skipped') { next = all[nextIdx]; break; }
+                                        nextIdx++;
+                                    }
                                     if (next) useSubtiStore.getState().setActiveSegId(next.id);
                                 } else if (e.key === 'Enter' && e.shiftKey) {
                                     e.preventDefault();
@@ -79,7 +86,12 @@ export default memo(function SubtitleRow({ seg }) {
                                     e.preventDefault();
                                     saveEdit(seg.id);
                                     const all = useSubtiStore.getState().segments;
-                                    const next = all[all.findIndex(s => s.id === seg.id) + 1];
+                                    let nextIdx = all.findIndex(s => s.id === seg.id) + 1;
+                                    let next = null;
+                                    while (nextIdx < all.length) {
+                                        if (all[nextIdx].status !== 'skipped') { next = all[nextIdx]; break; }
+                                        nextIdx++;
+                                    }
                                     if (next) {
                                         useSubtiStore.getState().setActiveSegId(next.id);
                                         useSubtiStore.getState().startEdit(next);
@@ -118,23 +130,34 @@ export default memo(function SubtitleRow({ seg }) {
 
                 {/* Status badge */}
                 <div style={{ width: 100, paddingTop: 2, flexShrink: 0 }}>
-                    <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
-                        padding: '3px 8px', borderRadius: 3, fontSize: 11,
-                        background: cfg.bg, color: cfg.color,
-                    }}>
-                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
-                        {cfg.label}
-                    </span>
+                    {isSkipped ? (
+                        <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '3px 8px', borderRadius: 3, fontSize: 11,
+                            background: 'rgba(156,163,175,0.12)', color: '#9ca3af',
+                            fontWeight: 600
+                        }}>
+                            ♪ Skipped
+                        </span>
+                    ) : (
+                        <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '3px 8px', borderRadius: 3, fontSize: 11,
+                            background: cfg.bg, color: cfg.color,
+                        }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
+                            {cfg.label}
+                        </span>
+                    )}
                 </div>
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 4, paddingTop: 1, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    {seg.status !== 'approved' && (
+                    {seg.status !== 'approved' && seg.status !== 'skipped' && (
                         <ActionBtn title="Approve" onClick={() => approve(seg.id)}><Check size={14} /></ActionBtn>
                     )}
                     <ActionBtn title="Edit" onClick={() => startEdit(seg)}><Edit2 size={14} /></ActionBtn>
-                    {seg.status !== 'in_review' && (
+                    {seg.status !== 'in_review' && seg.status !== 'skipped' && (
                         <ActionBtn title="Tandai In Review" onClick={() => setInReview(seg.id)} color="#8b5cf6"><Eye size={14} /></ActionBtn>
                     )}
                     <ActionBtn title="Flag" onClick={() => setFlaggingId(seg.id)} color="var(--red)"><Flag size={14} fill="currentColor" /></ActionBtn>

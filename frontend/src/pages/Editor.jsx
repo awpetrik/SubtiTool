@@ -15,9 +15,10 @@ const STATUS_CFG = {
     flagged: { label: 'Flagged', color: '#ef4444', bg: 'rgba(239,68,68,0.12)', dot: '#ef4444' },
     in_review: { label: 'In Review', color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', dot: '#8b5cf6' },
     approved: { label: 'Approved', color: '#10b981', bg: 'rgba(16,185,129,0.12)', dot: '#10b981' },
+    skipped: { label: 'Skipped', color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', dot: '#9ca3af' },
 };
 
-const FILTERS = ['all', 'ai_done', 'flagged', 'in_review', 'approved', 'pending'];
+const FILTERS = ['all', 'ai_done', 'flagged', 'in_review', 'approved', 'skipped', 'pending'];
 
 import { memo } from 'react';
 
@@ -91,7 +92,7 @@ export default function EditorPage() {
             const {
                 editingId, startEdit, toggleSelection, selectAllVisible,
                 clearSelection, undoAction, approveSelected, approve,
-                retranslate, setFlaggingId
+                retranslate, setFlaggingId, skipRow, bulkSkipCandidates,
             } = useSubtiStore.getState();
 
             // If we are editing or inside any input, let local events handle it
@@ -171,6 +172,35 @@ export default function EditorPage() {
                     case 'F':
                         if (activeSegId) setFlaggingId(activeSegId);
                         break;
+                    case 'n':
+                    case 'N': {
+                        let i = currIdx + 1;
+                        let found = false;
+                        while (i < filtered.length) {
+                            if (filtered[i].status === 'pending' || filtered[i].status === 'ai_done') {
+                                setAndScroll(i);
+                                found = true;
+                                break;
+                            }
+                            i++;
+                        }
+                        if (!found && currIdx !== filtered.length - 1) setAndScroll(filtered.length - 1);
+                        break;
+                    }
+                    case 's':
+                        if (activeSegId) skipRow(activeSegId);
+                        setAndScroll(currIdx + 1);
+                        break;
+                    case 'S':
+                        if (e.shiftKey) {
+                            if (window.confirm("Auto-skip semua baris lirik & sound effects sekaligus?")) {
+                                bulkSkipCandidates();
+                            }
+                        } else {
+                            if (activeSegId) skipRow(activeSegId);
+                            setAndScroll(currIdx + 1);
+                        }
+                        break;
                     case ' ':
                         if (activeSegId) toggleSelection(activeSegId);
                         break;
@@ -235,10 +265,15 @@ export default function EditorPage() {
                                 Row {Math.max(0, activeIndex) + 1} of {filtered.length}
                             </span>
                         )}
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{pctApproved}% approved</span>
-                        <div style={{ width: 120, height: 4, background: 'var(--bg-2)', borderRadius: 2, position: 'relative', overflow: 'hidden' }}>
-                            <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', background: 'var(--green)', borderRadius: 2, width: `${(stats.approved / stats.total) * 100}%`, transition: 'width 0.5s' }} />
-                            <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', background: 'var(--amber)', borderRadius: 2, width: `${((stats.approved + stats.ai_done) / stats.total) * 100}%`, opacity: 0.3 }} />
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{stats.total > 0 ? Math.round((stats.approved / (stats.total - Math.max(0, stats.skipped || 0))) * 100) : 0}% approved</span>
+                        <div
+                            title={`Approved: ${stats.approved}\nAI Done: ${stats.ai_done}\nSkipped: ${stats.skipped}\nFlagged: ${stats.flagged}\nIn Review: ${stats.in_review}\nPending: ${stats.pending}`}
+                            style={{ display: 'flex', width: 220, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'help' }}>
+                            <div style={{ width: `${(stats.approved / stats.total) * 100}%`, background: '#10b981', transition: 'width 0.3s' }} />
+                            <div style={{ width: `${(stats.ai_done / stats.total) * 100}%`, background: '#f59e0b', transition: 'width 0.3s' }} />
+                            <div style={{ width: `${(stats.skipped / stats.total) * 100}%`, background: '#9ca3af', transition: 'width 0.3s' }} />
+                            <div style={{ width: `${(stats.in_review / stats.total) * 100}%`, background: '#8b5cf6', transition: 'width 0.3s' }} />
+                            <div style={{ width: `${(stats.flagged / stats.total) * 100}%`, background: '#ef4444', transition: 'width 0.3s' }} />
                         </div>
                     </div>
                     <button
