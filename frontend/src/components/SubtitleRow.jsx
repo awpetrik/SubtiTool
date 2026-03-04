@@ -12,23 +12,28 @@ const STATUS_CFG = {
 };
 
 export default function SubtitleRow({ seg }) {
-    const { activeSegId, editingId, editValue, setActiveSegId, startEdit, cancelEdit, saveEdit, approve, setInReview } = useSubtiStore();
-    const [showFlag, setShowFlag] = useState(false);
+    const {
+        activeSegId, editingId, editValue, selectedSegIds, flaggingId,
+        setActiveSegId, startEdit, cancelEdit, saveEdit, approve, setInReview, setFlaggingId
+    } = useSubtiStore();
 
     const isActive = activeSegId === seg.id;
     const isEditing = editingId === seg.id;
+    const isSelected = selectedSegIds.has(seg.id);
+    const showFlag = flaggingId === seg.id;
     const cfg = STATUS_CFG[seg.status] || STATUS_CFG.pending;
 
     return (
         <>
             <div
+                id={`seg-${seg.id}`}
                 onClick={() => setActiveSegId(seg.id)}
                 style={{
                     display: 'flex', alignItems: 'flex-start', gap: 12,
                     padding: '10px 16px', borderBottom: '1px solid #141416',
                     cursor: 'pointer', transition: 'background 0.1s',
-                    background: isActive ? 'rgba(245,158,11,0.05)' : 'transparent',
-                    borderLeft: isActive ? '2px solid var(--amber)' : '2px solid transparent',
+                    background: isSelected ? 'var(--blue-dim)' : isActive ? 'rgba(245,158,11,0.05)' : 'transparent',
+                    borderLeft: isActive ? '2px solid var(--amber)' : isSelected ? '2px solid var(--blue)' : '2px solid transparent',
                 }}
             >
                 {/* Index */}
@@ -55,7 +60,29 @@ export default function SubtitleRow({ seg }) {
                             value={editValue}
                             onChange={e => useSubtiStore.setState({ editValue: e.target.value })}
                             onBlur={() => saveEdit(seg.id)}
-                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(seg.id); } if (e.key === 'Escape') cancelEdit(); }}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    saveEdit(seg.id);
+                                    const all = useSubtiStore.getState().segments;
+                                    const next = all[all.findIndex(s => s.id === seg.id) + 1];
+                                    if (next) useSubtiStore.getState().setActiveSegId(next.id);
+                                } else if (e.key === 'Enter' && e.shiftKey) {
+                                    e.preventDefault();
+                                    saveEdit(seg.id);
+                                } else if (e.key === 'Tab') {
+                                    e.preventDefault();
+                                    saveEdit(seg.id);
+                                    const all = useSubtiStore.getState().segments;
+                                    const next = all[all.findIndex(s => s.id === seg.id) + 1];
+                                    if (next) {
+                                        useSubtiStore.getState().setActiveSegId(next.id);
+                                        useSubtiStore.getState().startEdit(next);
+                                    }
+                                } else if (e.key === 'Escape') {
+                                    cancelEdit();
+                                }
+                            }}
                             style={{
                                 width: '100%', background: 'var(--bg)', border: '1px solid var(--amber)',
                                 color: '#fff', padding: '4px 6px', borderRadius: 3, resize: 'none',
@@ -105,12 +132,12 @@ export default function SubtitleRow({ seg }) {
                     {seg.status !== 'in_review' && (
                         <ActionBtn title="Tandai In Review" onClick={() => setInReview(seg.id)} color="#8b5cf6"><Eye size={14} /></ActionBtn>
                     )}
-                    <ActionBtn title="Flag" onClick={() => setShowFlag(true)} color="var(--red)"><Flag size={14} fill="currentColor" /></ActionBtn>
+                    <ActionBtn title="Flag" onClick={() => setFlaggingId(seg.id)} color="var(--red)"><Flag size={14} fill="currentColor" /></ActionBtn>
                 </div>
             </div>
 
             {showFlag && (
-                <FlagModal segId={seg.id} initialNote={seg.flag_note} onClose={() => setShowFlag(false)} />
+                <FlagModal segId={seg.id} initialNote={seg.flag_note} onClose={() => setFlaggingId(null)} />
             )}
         </>
     );

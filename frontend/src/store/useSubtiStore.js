@@ -13,21 +13,81 @@ const useSubtiStore = create((set, get) => ({
   filterStatus: 'all',
   activeSegId: null,
   editingId: null,
+  flaggingId: null,
   editValue: '',
   sidePanel: 'glossary', // 'glossary' | 'stats'
   isTranslating: false,
   jobProgress: { processed: 0, total: 0, logs: [], status: 'idle' },
 
+  // Keyboard navigation state
+  selectedSegIds: new Set(),
+  undoStack: [],
+
+  // Helpers
+  prepareUndo: (segId) => {
+    const seg = get().segments.find(s => s.id === segId);
+    if (!seg) return;
+    set(s => ({
+      undoStack: [...s.undoStack, { segId: seg.id, translation: seg.translation, status: seg.status, flag_note: seg.flag_note }]
+    }));
+  },
+
   // Actions
   setFilter: (f) => set({ filterStatus: f }),
   setActiveSegId: (id) => set({ activeSegId: id }),
+  setFlaggingId: (id) => set({ flaggingId: id }),
   setSidePanel: (p) => set({ sidePanel: p }),
 
-  startEdit: (seg) => set({ editingId: seg.id, editValue: seg.translation }),
+  toggleSelection: (id) => set(s => {
+    const newSel = new Set(s.selectedSegIds);
+    if (newSel.has(id)) newSel.delete(id);
+    else newSel.add(id);
+    return { selectedSegIds: newSel };
+  }),
+  selectAllVisible: (ids) => set({ selectedSegIds: new Set(ids) }),
+  clearSelection: () => set({ selectedSegIds: new Set() }),
+
+  undoAction: async (targetSegId = null) => {
+    const { undoStack, segments, currentProject } = get();
+    if (!undoStack.length) return;
+
+    let entry = null, index = -1;
+    if (targetSegId) {
+      for (let i = undoStack.length - 1; i >= 0; i--) {
+        if (undoStack[i].segId === targetSegId) {
+          entry = undoStack[i];
+          index = i;
+          break;
+        }
+      }
+    } else {
+      entry = undoStack[undoStack.length - 1];
+      index = undoStack.length - 1;
+    }
+
+    if (!entry) return;
+
+    const newStack = [...undoStack];
+    newStack.splice(index, 1);
+    set({ undoStack: newStack });
+
+    const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${entry.segId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ translation: entry.translation, status: entry.status, flag_note: entry.flag_note || '' }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      set({ segments: get().segments.map(s => s.id === entry.segId ? updated : s) });
+    }
+  },
+
+  startEdit: (seg) => set({ editingId: seg.id, editValue: seg.translation || '' }),
   cancelEdit: () => set({ editingId: null, editValue: '' }),
 
   saveEdit: async (segId) => {
-    const { currentProject, editValue, segments } = get();
+    const { currentProject, editValue, segments, prepareUndo } = get();
+    prepareUndo(segId);
     set({ editingId: null });
     const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
       method: 'PATCH',
@@ -36,12 +96,13 @@ const useSubtiStore = create((set, get) => ({
     });
     if (res.ok) {
       const updated = await res.json();
-      set({ segments: segments.map(s => s.id === segId ? updated : s) });
+      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
     }
   },
 
   approve: async (segId) => {
-    const { currentProject, segments } = get();
+    const { currentProject, segments, prepareUndo } = get();
+    prepareUndo(segId);
     const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -49,12 +110,33 @@ const useSubtiStore = create((set, get) => ({
     });
     if (res.ok) {
       const updated = await res.json();
-      set({ segments: segments.map(s => s.id === segId ? updated : s) });
+      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
     }
   },
 
+  approveSelected: async () => {
+    const { selectedSegIds, segments, currentProject, prepareUndo } = get();
+    if (selectedSegIds.size === 0) return;
+
+    const ids = Array.from(selectedSegIds);
+    // Doing sequentially to be safe, could be optimized to batch backend API
+    for (const id of ids) {
+      prepareUndo(id);
+      const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set(state => ({ segments: state.segments.map(s => s.id === id ? updated : s) }));
+      }
+    }
+    set({ selectedSegIds: new Set() });
+  },
+
   setInReview: async (segId) => {
-    const { currentProject, segments } = get();
+    const { currentProject, segments, prepareUndo } = get();
+    prepareUndo(segId);
     const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -62,12 +144,13 @@ const useSubtiStore = create((set, get) => ({
     });
     if (res.ok) {
       const updated = await res.json();
-      set({ segments: segments.map(s => s.id === segId ? updated : s) });
+      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
     }
   },
 
   submitFlag: async (segId, flagNote) => {
-    const { currentProject, segments } = get();
+    const { currentProject, segments, prepareUndo } = get();
+    prepareUndo(segId);
     const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -75,7 +158,21 @@ const useSubtiStore = create((set, get) => ({
     });
     if (res.ok) {
       const updated = await res.json();
-      set({ segments: segments.map(s => s.id === segId ? updated : s) });
+      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+    }
+  },
+
+  retranslate: async (segId) => {
+    const { currentProject, segments, prepareUndo } = get();
+    prepareUndo(segId);
+    const res = await fetch(`${API}/api/translate/${currentProject.id}/segment/${segId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
     }
   },
 
@@ -83,7 +180,11 @@ const useSubtiStore = create((set, get) => ({
     const res = await fetch(`${API}/api/projects/${projectId}`);
     if (res.ok) {
       const data = await res.json();
-      set({ currentProject: data.project, segments: data.segments, glossary: data.glossary });
+      set({
+        currentProject: data.project, segments: data.segments, glossary: data.glossary,
+        activeSegId: data.segments.length > 0 ? data.segments[0].id : null,
+        selectedSegIds: new Set(), undoStack: []
+      });
     }
   },
 
@@ -116,7 +217,7 @@ const useSubtiStore = create((set, get) => ({
       set({ isTranslating: false, jobProgress: { processed: 0, total: 0, logs: [err.detail], status: 'error' } });
       return null;
     }
-    return await res.json(); // { job_id, project_id, total }
+    return await res.json();
   },
 
   listenProgress: (jobId, onDone) => {
@@ -148,7 +249,6 @@ const useSubtiStore = create((set, get) => ({
     };
   },
 
-  // Computed stats
   getStats: () => {
     const { segments } = get();
     return {

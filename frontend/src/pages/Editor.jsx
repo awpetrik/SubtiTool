@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
-import { Hexagon } from 'lucide-react';
+import { Hexagon, HelpCircle, X } from 'lucide-react';
 import SubSourceModal from '../components/SubSourceModal';
 
 const API = 'http://localhost:8000';
@@ -36,6 +36,130 @@ export default function EditorPage() {
 
     useEffect(() => { if (id) loadProject(parseInt(id)); }, [id]);
 
+    const [showShortcuts, setShowShortcuts] = useState(false);
+    const lastKeyRef = useRef('');
+
+    useEffect(() => { if (id) loadProject(parseInt(id)); }, [id]);
+
+    const stats = getStats();
+    const filtered = filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
+    const pctApproved = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0;
+    const activeSegment = activeSegId ? segments.find(s => s.id === activeSegId) : null;
+    const activeIndex = filtered.findIndex(s => s.id === activeSegId);
+
+    // Auto-scroll active row into view
+    useEffect(() => {
+        if (activeSegId) {
+            const el = document.getElementById(`seg-${activeSegId}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+    }, [activeSegId]);
+
+    // Handle global keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            const {
+                editingId, startEdit, toggleSelection, selectAllVisible,
+                clearSelection, undoAction, approveSelected, approve,
+                retranslate, setFlaggingId
+            } = useSubtiStore.getState();
+
+            // If we are editing or inside any input, let local events handle it
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || editingId) return;
+            if (!filtered || !filtered.length) return;
+
+            const currIdx = activeIndex === -1 ? 0 : activeIndex;
+            const setAndScroll = (idx) => {
+                const bounded = Math.max(0, Math.min(filtered.length - 1, idx));
+                setActiveSegId(filtered[bounded].id);
+            };
+
+            let handled = true;
+
+            if (e.key === '?') {
+                setShowShortcuts(s => !s);
+            } else if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'a' || e.key === 'A') {
+                    selectAllVisible(filtered.map(s => s.id));
+                } else if (e.key === 'Enter') {
+                    approveSelected();
+                } else if (e.key === 'z' || e.key === 'Z') {
+                    undoAction();
+                } else {
+                    handled = false;
+                }
+            } else {
+                switch (e.key) {
+                    case 'ArrowDown':
+                    case 'j':
+                        if (e.shiftKey) toggleSelection(filtered[currIdx].id);
+                        setAndScroll(currIdx + 1);
+                        if (e.shiftKey) toggleSelection(filtered[Math.min(filtered.length - 1, currIdx + 1)].id);
+                        break;
+                    case 'ArrowUp':
+                    case 'k':
+                        if (e.shiftKey) toggleSelection(filtered[currIdx].id);
+                        setAndScroll(currIdx - 1);
+                        if (e.shiftKey) toggleSelection(filtered[Math.max(0, currIdx - 1)].id);
+                        break;
+                    case 'PageDown':
+                        setAndScroll(currIdx + 10);
+                        break;
+                    case 'PageUp':
+                        setAndScroll(currIdx - 10);
+                        break;
+                    case 'g':
+                        if (lastKeyRef.current === 'g') {
+                            setAndScroll(0);
+                            lastKeyRef.current = '';
+                        } else {
+                            lastKeyRef.current = 'g';
+                            setTimeout(() => { lastKeyRef.current = ''; }, 500);
+                            handled = false;
+                        }
+                        break;
+                    case 'G':
+                        setAndScroll(filtered.length - 1);
+                        break;
+                    case 'Enter':
+                    case 'F2':
+                        if (activeSegment) startEdit(activeSegment);
+                        break;
+                    case 'a':
+                    case 'A':
+                        if (activeSegId) approve(activeSegId);
+                        break;
+                    case 'r':
+                    case 'R':
+                        if (activeSegId) retranslate(activeSegId);
+                        break;
+                    case 'u':
+                    case 'U':
+                        if (activeSegId) undoAction(activeSegId);
+                        break;
+                    case 'f':
+                    case 'F':
+                        if (activeSegId) setFlaggingId(activeSegId);
+                        break;
+                    case ' ':
+                        if (activeSegId) toggleSelection(activeSegId);
+                        break;
+                    case 'Escape':
+                        clearSelection();
+                        break;
+                    default:
+                        handled = false;
+                }
+            }
+            if (handled) e.preventDefault();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeSegId, filtered, activeIndex]);
+
     useEffect(() => {
         if (isPlaying) {
             timerRef.current = setInterval(() => setVideoTime(t => (t + 0.1) % 600), 100);
@@ -44,11 +168,6 @@ export default function EditorPage() {
         }
         return () => clearInterval(timerRef.current);
     }, [isPlaying]);
-
-    const stats = getStats();
-    const filtered = filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
-    const pctApproved = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0;
-    const activeSegment = activeSegId ? segments.find(s => s.id === activeSegId) : null;
 
     const fmtTime = t => {
         const m = Math.floor(t / 60).toString().padStart(2, '0');
@@ -82,7 +201,12 @@ export default function EditorPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     {/* Progress */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {activeSegId && (
+                            <span style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 700, background: 'var(--amber-dim)', padding: '2px 8px', borderRadius: 4 }}>
+                                Row {Math.max(0, activeIndex) + 1} of {filtered.length}
+                            </span>
+                        )}
                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{pctApproved}% approved</span>
                         <div style={{ width: 120, height: 4, background: 'var(--bg-2)', borderRadius: 2, position: 'relative', overflow: 'hidden' }}>
                             <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', background: 'var(--green)', borderRadius: 2, width: `${(stats.approved / stats.total) * 100}%`, transition: 'width 0.5s' }} />
@@ -100,6 +224,9 @@ export default function EditorPage() {
                         style={{ background: 'var(--amber)', color: '#000', border: 'none', padding: '5px 14px', borderRadius: 4, fontSize: 12, fontWeight: 800 }}
                     >
                         ↑ SubSource
+                    </button>
+                    <button onClick={() => setShowShortcuts(true)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }} title="Keyboard Shortcuts (?)">
+                        <HelpCircle size={16} />
                     </button>
                 </div>
             </header>
@@ -222,6 +349,57 @@ export default function EditorPage() {
                     onClose={() => setShowSubSource(false)}
                 />
             )}
+
+            {showShortcuts && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)' }} onClick={() => setShowShortcuts(false)}>
+                    <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, width: 600, color: 'var(--text)', boxShadow: '0 10px 40px rgba(0,0,0,0.8)' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--amber)' }}><HelpCircle size={20} /> Keyboard Shortcuts</h3>
+                            <button onClick={() => setShowShortcuts(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)' }}><X size={20} /></button>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 30 }}>
+                            <div>
+                                <h4 style={{ margin: '0 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Navigation</h4>
+                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                    <li><kbd style={kbd}>↑/↓</kbd> or <kbd style={kbd}>J/K</kbd>  <span style={{ float: 'right' }}>Move row</span></li>
+                                    <li><kbd style={kbd}>PgUp/Dn</kbd> <span style={{ float: 'right' }}>Jump 10 rows</span></li>
+                                    <li><kbd style={kbd}>gg</kbd> / <kbd style={kbd}>Shift+G</kbd> <span style={{ float: 'right' }}>First / Last row</span></li>
+                                </ul>
+                                <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Bulk Actions</h4>
+                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                    <li><kbd style={kbd}>Space</kbd> <span style={{ float: 'right' }}>Toggle select</span></li>
+                                    <li><kbd style={kbd}>Shift+↑/↓</kbd> <span style={{ float: 'right' }}>Extend select</span></li>
+                                    <li><kbd style={kbd}>Ctrl+A</kbd> <span style={{ float: 'right' }}>Select all visible</span></li>
+                                    <li><kbd style={kbd}>Ctrl+Enter</kbd> <span style={{ float: 'right' }}>Approve selected</span></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 style={{ margin: '0 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Editing (in Row)</h4>
+                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                    <li><kbd style={kbd}>Enter</kbd> / <kbd style={kbd}>F2</kbd> <span style={{ float: 'right' }}>Edit active row</span></li>
+                                    <li><kbd style={kbd}>Enter</kbd> <span style={{ float: 'right' }}>Save & Next</span></li>
+                                    <li><kbd style={kbd}>Shift+Enter</kbd> <span style={{ float: 'right' }}>Save & Stay</span></li>
+                                    <li><kbd style={kbd}>Tab</kbd> <span style={{ float: 'right' }}>Save & Edit Next</span></li>
+                                    <li><kbd style={kbd}>Esc</kbd> <span style={{ float: 'right' }}>Cancel edit</span></li>
+                                </ul>
+                                <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Actions</h4>
+                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                    <li><kbd style={kbd}>A</kbd> <span style={{ float: 'right' }}>Approve row</span></li>
+                                    <li><kbd style={kbd}>F</kbd> <span style={{ float: 'right' }}>Flag for review</span></li>
+                                    <li><kbd style={kbd}>R</kbd> <span style={{ float: 'right' }}>Re-translate</span></li>
+                                    <li><kbd style={kbd}>U</kbd> <span style={{ float: 'right' }}>Undo current row</span></li>
+                                    <li><kbd style={kbd}>Ctrl+Z</kbd> <span style={{ float: 'right' }}>Global Undo</span></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+
+const kbd = {
+    background: '#222', border: '1px solid #333', borderRadius: 4, padding: '2px 6px',
+    fontFamily: 'var(--mono)', fontSize: 10, color: '#e5e7eb', boxShadow: '0 2px 0 #111'
+};
