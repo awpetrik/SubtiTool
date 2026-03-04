@@ -170,14 +170,17 @@ export default memo(function SubtitleRow({ seg }) {
                 </div>
 
                 {/* Actions */}
-                <div style={{ display: 'flex', gap: 4, paddingTop: 1, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    {seg.status !== 'approved' && seg.status !== 'skipped' && (
+                <div style={{ display: 'flex', gap: 4, paddingTop: 1, flexShrink: 0, width: 116 }} onClick={e => e.stopPropagation()}>
+                    {seg.status !== 'approved' && seg.status !== 'skipped' ? (
                         <ActionBtn title="Approve" onClick={() => approve(seg.id)}><Check size={14} /></ActionBtn>
-                    )}
+                    ) : <div style={{ width: 26, height: 26 }} />}
+
                     <ActionBtn title="Edit" onClick={() => startEdit(seg)}><Edit2 size={14} /></ActionBtn>
-                    {seg.status !== 'in_review' && seg.status !== 'skipped' && (
+
+                    {seg.status !== 'in_review' && seg.status !== 'skipped' ? (
                         <ActionBtn title="Tandai In Review" onClick={() => setInReview(seg.id)} color="#8b5cf6"><Eye size={14} /></ActionBtn>
-                    )}
+                    ) : <div style={{ width: 26, height: 26 }} />}
+
                     <ActionBtn title="Flag" onClick={() => setFlaggingId(seg.id)} color="var(--red)"><Flag size={14} fill="currentColor" /></ActionBtn>
                 </div>
             </div>
