@@ -90,7 +90,11 @@ async def start_translate(
     db.commit()
     print(f"DEBUG: inserted {len(segments_data)} segments into DB for project_id={project.id}")
 
-    # Buat background job
+    # Manual mode: langsung ke editor tanpa translate
+    if engine == "manual":
+        return {"job_id": None, "project_id": project.id, "total": len(segments_data)}
+
+    # Buat background job untuk AI translate
     job_id = str(uuid.uuid4())
     _jobs[job_id] = {
         "project_id": project.id,

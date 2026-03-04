@@ -17,6 +17,7 @@ function parseTitle(filename) {
 }
 
 const ENGINES = [
+    { value: 'manual', label: '✏ Manual', desc: 'Upload SRT, terjemahkan sendiri di editor' },
     { value: 'google_free', label: '⚡ Google Free', desc: 'Tanpa API key, cepat, gratis' },
     { value: 'gemini', label: '✦ Gemini AI', desc: 'Kontekstual, kualitas terbaik' },
     { value: 'libretranslate', label: '🔒 LibreTranslate', desc: 'Self-hosted, offline / private' },
@@ -98,6 +99,8 @@ export default function UploadPage() {
         (engine === 'gemini' && !geminiKey.trim()) ||
         (engine === 'libretranslate' && !libreUrl.trim());
 
+    const isManual = engine === 'manual';
+
     // ── SSE progress listener ──────────────────────────────────────
     const listenProgress = (jobId, projectId) => {
         const es = new EventSource(`${API}/api/translate/${jobId}/progress`);
@@ -162,6 +165,11 @@ export default function UploadPage() {
             if (!res.ok) {
                 setPhase('error');
                 setSubmitError(data.detail || `Error ${res.status}`);
+                return;
+            }
+            // Manual mode: job_id null → langsung ke editor
+            if (!data.job_id) {
+                navigate(`/editor/${data.project_id}`);
                 return;
             }
             setProgress(prev => ({ ...prev, total: data.total }));
@@ -378,9 +386,11 @@ export default function UploadPage() {
                             ...s.btnSubmit,
                             opacity: isSubmitDisabled ? 0.45 : 1,
                             cursor: isSubmitDisabled ? 'not-allowed' : 'pointer',
+                            background: isManual ? '#374151' : 'var(--amber)',
+                            color: isManual ? '#e5e7eb' : '#000',
                         }}
                     >
-                        ✦ Mulai Translate
+                        {isManual ? '✏ Upload & Edit Manual' : '✦ Mulai Translate'}
                     </button>
                 )}
             </form>
