@@ -60,8 +60,12 @@ export default function EditorPage() {
     const [showSubSource, setShowSubSource] = useState(false);
     const [videoTime, setVideoTime] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
+
+    // Viewfinder Native Playback
+    const [videoSrc, setVideoSrc] = useState(null);
+    const videoRef = useRef(null);
+
     const [showBackToTop, setShowBackToTop] = useState(false);
-    const timerRef = useRef(null);
     const mainRef = useRef(null);
 
     useEffect(() => { if (id) loadProject(parseInt(id)); }, [id]);
@@ -243,34 +247,44 @@ export default function EditorPage() {
         }
     }, [activeSegId, activeSegment]);
 
-    useEffect(() => {
-        if (isPlaying) {
-            timerRef.current = setInterval(() => {
-                setVideoTime(t => {
-                    const newT = t + 0.1;
+    const handleVideoTimeUpdate = () => {
+        if (!videoRef.current) return;
+        const curTime = videoRef.current.currentTime;
+        setVideoTime(curTime);
 
-                    // Auto-advance segment if video crosses its end time
-                    const seg = activeSegRef.current;
-                    const list = filteredRef.current;
-                    if (seg && list.length > 0) {
-                        const endSec = timecodeToSeconds(seg.timecode_end);
-                        if (newT >= endSec + 0.1) {
-                            const curIdx = list.findIndex(s => s.id === seg.id);
-                            if (curIdx >= 0 && curIdx < list.length - 1) {
-                                useSubtiStore.getState().setActiveSegId(list[curIdx + 1].id);
-                            } else {
-                                setIsPlaying(false); // Stop if EOF
-                            }
-                        }
-                    }
-                    return newT;
-                });
-            }, 100);
-        } else {
-            clearInterval(timerRef.current);
+        if (isPlaying) {
+            const list = filteredRef.current;
+            const currentSeg = list.find(s => {
+                const start = timecodeToSeconds(s.timecode_start);
+                const end = timecodeToSeconds(s.timecode_end);
+                return curTime >= start && curTime <= end; // active strictly inside its time bounds
+            });
+
+            // If we're playing and entering a new segment, auto-advance Editor focus
+            // BUT do not hijack if the user is typing (editingId is not null)
+            const isEditing = useSubtiStore.getState().editingId !== null;
+            if (currentSeg && currentSeg.id !== activeSegRef.current?.id && !isEditing) {
+                useSubtiStore.getState().setActiveSegId(currentSeg.id);
+            }
         }
-        return () => clearInterval(timerRef.current);
-    }, [isPlaying]);
+    };
+
+    const togglePlay = () => {
+        if (!videoRef.current) return;
+        if (isPlaying) {
+            videoRef.current.pause();
+        } else {
+            videoRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    const handleVideoFile = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setVideoSrc(URL.createObjectURL(file));
+        }
+    };
 
     const fmtTime = t => {
         const m = Math.floor(t / 60).toString().padStart(2, '0');
@@ -342,28 +356,53 @@ export default function EditorPage() {
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden', height: 'calc(100vh - 52px)' }}>
                 {/* ── LEFT PANEL ── */}
                 <aside style={{ width: 260, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0, background: 'var(--bg-1)' }}>
-                    {/* Video mockup */}
-                    <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-                        <div style={{ height: 130, background: '#050505', borderRadius: 6, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            {/* Grain texture */}
-                            <div style={{ position: 'absolute', inset: 0, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E\")", opacity: 0.5 }} />
-                            <div style={{ position: 'absolute', top: 8, left: 10, fontSize: 10, color: '#333' }}>{currentProject.title}</div>
-                            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, rgba(0,0,0,0.9))' }} />
-                            {activeSegment?.translation && (
-                                <div style={{ position: 'relative', zIndex: 2, color: '#fff', fontSize: 13, textAlign: 'center', padding: '4px 12px 12px', textShadow: '0 1px 4px #000', fontFamily: 'sans-serif' }}
-                                    dangerouslySetInnerHTML={{ __html: activeSegment.translation }}
+                    {/* Viewfinder */}
+                    <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {videoSrc ? (
+                            <div style={{ height: 140, background: '#000', borderRadius: 6, position: 'relative', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <video
+                                    ref={videoRef}
+                                    src={videoSrc}
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                    onTimeUpdate={handleVideoTimeUpdate}
+                                    onEnded={() => setIsPlaying(false)}
+                                    autoPlay={false}
+                                    controls={false}
                                 />
-                            )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-                            <button onClick={() => setIsPlaying(p => !p)} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
-                                {isPlaying ? '⏸' : '▶'}
-                            </button>
-                            <div title="Current Video Time (Mockup synced to SRT)" style={{ flex: 1, height: 4, background: 'var(--bg-2)', borderRadius: 2, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', background: 'var(--amber)', width: `${Math.min(100, (videoTime / (timecodeToSeconds(filtered[filtered.length - 1]?.timecode_end) || 600)) * 100)}%`, transition: 'width 0.1s linear' }} />
+                                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 12px 10px', background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)', pointerEvents: 'none' }}>
+                                    {activeSegment?.translation && (
+                                        <p style={{ margin: 0, color: '#fff', fontSize: 13, textAlign: 'center', textShadow: '0 1px 4px #000', fontFamily: 'sans-serif', whiteSpace: 'pre-wrap', lineHeight: 1.3 }}
+                                            dangerouslySetInnerHTML={{ __html: activeSegment.translation }}
+                                        />
+                                    )}
+                                </div>
                             </div>
-                            <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
-                        </div>
+                        ) : (
+                            <div style={{ height: 140, background: 'var(--bg-2)', borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', padding: 16, textAlign: 'center', gap: 10 }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Load a video/audio file to preview sync</span>
+                                <label style={{ display: 'inline-block', background: 'var(--amber)', color: '#000', padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                                    Load Media
+                                    <input type="file" accept="video/*,audio/*" onChange={handleVideoFile} style={{ display: 'none' }} />
+                                </label>
+                            </div>
+                        )}
+
+                        {videoSrc && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <button onClick={togglePlay} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
+                                    {isPlaying ? '⏸' : '▶'}
+                                </button>
+                                <div title="Seek Video" onClick={e => {
+                                    if (!videoRef.current) return;
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const pct = (e.clientX - rect.left) / rect.width;
+                                    videoRef.current.currentTime = pct * videoRef.current.duration;
+                                }} style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+                                    <div style={{ height: '100%', background: 'var(--amber)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
+                                </div>
+                                <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Filter pills */}
