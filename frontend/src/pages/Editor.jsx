@@ -112,9 +112,9 @@ export default function EditorPage() {
                             <div style={{ position: 'absolute', top: 8, left: 10, fontSize: 10, color: '#333' }}>{currentProject.title}</div>
                             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.8))' }} />
                             {activeSegment?.translation && (
-                                <div style={{ position: 'relative', zIndex: 2, color: '#fff', fontSize: 12, textAlign: 'center', padding: '4px 10px 10px', textShadow: '0 1px 4px #000', fontFamily: 'sans-serif' }}>
-                                    {activeSegment.translation}
-                                </div>
+                                <div style={{ position: 'relative', zIndex: 2, color: '#fff', fontSize: 12, textAlign: 'center', padding: '4px 10px 10px', textShadow: '0 1px 4px #000', fontFamily: 'sans-serif' }}
+                                    dangerouslySetInnerHTML={{ __html: activeSegment.translation }}
+                                />
                             )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg-1)' }}>

@@ -17,7 +17,6 @@ export default function SubtitleRow({ seg }) {
     const isActive = activeSegId === seg.id;
     const isEditing = editingId === seg.id;
     const cfg = STATUS_CFG[seg.status] || STATUS_CFG.pending;
-    const store = useSubtiStore.getState();
 
     return (
         <>
@@ -41,7 +40,10 @@ export default function SubtitleRow({ seg }) {
 
                 {/* Original */}
                 <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.5 }}>{seg.original}</p>
+                    <p
+                        style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.5 }}
+                        dangerouslySetInnerHTML={{ __html: seg.original }}
+                    />
                 </div>
 
                 {/* Translation — double-click to edit */}
@@ -62,9 +64,16 @@ export default function SubtitleRow({ seg }) {
                         />
                     ) : (
                         <>
-                            <p style={{ margin: 0, color: seg.translation ? 'var(--text)' : 'var(--text-muted)', lineHeight: 1.5, fontStyle: seg.translation ? 'normal' : 'italic' }}>
-                                {seg.translation || '— belum ditranslate —'}
-                            </p>
+                            {seg.translation ? (
+                                <p
+                                    style={{ margin: 0, color: 'var(--text)', lineHeight: 1.5 }}
+                                    dangerouslySetInnerHTML={{ __html: seg.translation }}
+                                />
+                            ) : (
+                                <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.5, fontStyle: 'italic' }}>
+                                    — belum ditranslate —
+                                </p>
+                            )}
                             {seg.flag_note && (
                                 <p style={{ margin: '4px 0 0', color: 'var(--red)', fontSize: 11 }}>⚑ {seg.flag_note}</p>
                             )}

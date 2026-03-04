@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from models import Project, Segment, Glossary
 from services.srt_parser import parse_srt
+from routers.projects import _segment_dict
 from services.engines.gemini import GeminiEngine
 from services.engines.google_free import GoogleFreeEngine
 from services.engines.libretranslate import LibreTranslateEngine
@@ -223,6 +224,6 @@ async def retranslate_segment(
         seg.status = "ai_done"
         db.commit()
         db.refresh(seg)
-        return seg
+        return _segment_dict(seg)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
