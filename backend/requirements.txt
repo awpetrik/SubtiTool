@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy
+google-genai
+deep-translator
+httpx
+aiofiles
+python-dotenv
+sse-starlette
