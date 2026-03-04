@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
-import { Hexagon, HelpCircle, X, BookOpen, BarChart2, Filter } from 'lucide-react';
+import { Hexagon, HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp } from 'lucide-react';
 import SubSourceModal from '../components/SubSourceModal';
 
 const API = 'http://localhost:8000';
@@ -32,7 +32,9 @@ export default function EditorPage() {
     const [showSubSource, setShowSubSource] = useState(false);
     const [videoTime, setVideoTime] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [showBackToTop, setShowBackToTop] = useState(false);
     const timerRef = useRef(null);
+    const mainRef = useRef(null);
 
     useEffect(() => { if (id) loadProject(parseInt(id)); }, [id]);
 
@@ -327,7 +329,11 @@ export default function EditorPage() {
                 </aside>
 
                 {/* ── MAIN EDITOR ── */}
-                <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+                <main
+                    ref={mainRef}
+                    onScroll={e => setShowBackToTop(e.target.scrollTop > 300)}
+                    style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}
+                >
                     {/* Table header */}
                     <div style={{
                         display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px',
@@ -404,6 +410,25 @@ export default function EditorPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showBackToTop && (
+                <button
+                    onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                    style={{
+                        position: 'fixed', bottom: 30, right: 30, zIndex: 900,
+                        background: 'var(--amber)', color: '#000', border: 'none',
+                        width: 44, height: 44, borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.4)', transition: 'all 0.2s',
+                        cursor: 'pointer'
+                    }}
+                    title="Kembali ke atas"
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                >
+                    <ArrowUp size={22} />
+                </button>
             )}
         </div>
     );
