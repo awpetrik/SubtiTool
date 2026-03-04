@@ -17,9 +17,7 @@ from services.engines.libretranslate import LibreTranslateEngine
 
 router = APIRouter(prefix="/api/translate", tags=["translate"])
 
-# In-memory job store { job_id: { status, progress, total, logs } }
 _jobs: dict = {}
-
 BATCH_SIZE = 40
 OVERLAP = 5
 
@@ -31,8 +29,7 @@ class RetranslateRequest(BaseModel):
 
 def _get_engine(engine_name: str, gemini_key: Optional[str]):
     if engine_name == "gemini":
-        key = gemini_key or ""
-        return GeminiEngine(api_key=key)
+        return GeminiEngine(api_key=gemini_key or "")
     if engine_name == "google_free":
         return GoogleFreeEngine()
     if engine_name == "libretranslate":
@@ -60,14 +57,9 @@ async def start_translate(
         raw = content.decode("latin-1")
 
     segments_data = parse_srt(raw)
-    print(f"DEBUG: decoded {len(raw)} chars, parsed {len(segments_data)} segments")
-    if segments_data:
-        print(f"DEBUG: first segment → index={segments_data[0]['index']}, text={repr(segments_data[0]['original'][:60])}")
-
     if not segments_data:
         raise HTTPException(status_code=400, detail="File SRT tidak valid atau kosong.")
 
-    # Buat project baru
     project = Project(
         title=title, genre=genre, char_context=char_context,
         lang_from=lang_from, lang_to=lang_to, engine=engine,
@@ -76,7 +68,6 @@ async def start_translate(
     db.commit()
     db.refresh(project)
 
-    # Simpan semua segment sebagai "pending"
     for seg in segments_data:
         db.add(Segment(
             project_id=project.id,
@@ -88,13 +79,10 @@ async def start_translate(
             status="pending",
         ))
     db.commit()
-    print(f"DEBUG: inserted {len(segments_data)} segments into DB for project_id={project.id}")
 
-    # Manual mode: langsung ke editor tanpa translate
     if engine == "manual":
         return {"job_id": None, "project_id": project.id, "total": len(segments_data)}
 
-    # Buat background job untuk AI translate
     job_id = str(uuid.uuid4())
     _jobs[job_id] = {
         "project_id": project.id,
@@ -119,10 +107,6 @@ async def start_translate(
 
 
 def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key):
-    """Sync wrapper — dijalankan di thread pool oleh BackgroundTasks.
-    Membuat event loop baru agar aman dari konflik dengan main event loop uvicorn.
-    """
-    import asyncio
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -130,7 +114,6 @@ def _run_translate_job(job_id, project_id, segments_data, context, engine_name, 
             _run_translate_job_async(job_id, project_id, segments_data, context, engine_name, gemini_key)
         )
     except Exception as e:
-        print(f"[translate job CRASH] {e}", flush=True)
         if job_id in _jobs:
             _jobs[job_id]["status"] = "error"
             _jobs[job_id]["error"] = str(e)
@@ -166,7 +149,6 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
                 translated = translated[OVERLAP:]
             all_translated.extend(translated)
 
-            # Update DB per batch
             for idx_offset, trans in enumerate(translated):
                 seg_index = (len(all_translated) - len(translated)) + idx_offset
                 if seg_index >= len(segments_data):
@@ -180,12 +162,9 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
             db.commit()
             job["processed"] = min(len(all_translated), len(lines))
             job["logs"].append(f"Batch {i//BATCH_SIZE + 1}: {job['processed']}/{job['total']} baris selesai")
-            print(f"[translate] project={project_id} {job['processed']}/{job['total']}", flush=True)
 
         job["status"] = "done"
-        print(f"[translate] project={project_id} DONE", flush=True)
     except Exception as e:
-        print(f"[translate] project={project_id} ERROR: {e}", flush=True)
         job["status"] = "error"
         job["error"] = str(e)
     finally:
@@ -194,7 +173,6 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
 
 @router.get("/{job_id}/progress")
 async def get_progress(job_id: str):
-    """SSE stream untuk progress translate job."""
     if job_id not in _jobs:
         raise HTTPException(status_code=404, detail="Job tidak ditemukan")
 
@@ -208,16 +186,15 @@ async def get_progress(job_id: str):
                 yield f"data: {log}\n\n"
                 sent_logs += 1
 
-            progress_data = (
-                f"processed={job.get('processed', 0)}&"
+            yield (
+                f"event: progress\n"
+                f"data: processed={job.get('processed', 0)}&"
                 f"total={job.get('total', 0)}&"
-                f"status={job.get('status', 'running')}"
+                f"status={job.get('status', 'running')}\n\n"
             )
-            yield f"event: progress\ndata: {progress_data}\n\n"
 
             if job.get("status") in ("done", "error"):
-                error = job.get("error", "")
-                yield f"event: done\ndata: status={job['status']}&error={error}\n\n"
+                yield f"event: done\ndata: status={job['status']}&error={job.get('error', '')}\n\n"
                 break
 
             await asyncio.sleep(0.8)
@@ -232,7 +209,6 @@ async def retranslate_segment(
     payload: RetranslateRequest,
     db: Session = Depends(get_db),
 ):
-    """Re-translate satu baris dengan instruksi opsional."""
     seg = db.query(Segment).filter(Segment.id == seg_id, Segment.project_id == project_id).first()
     if not seg:
         raise HTTPException(status_code=404, detail="Segment tidak ditemukan")

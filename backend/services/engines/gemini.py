@@ -5,8 +5,6 @@ import logging
 from typing import List, Dict
 
 from google import genai
-from google.genai import types
-
 from services.translator import TranslateEngine
 
 logger = logging.getLogger(__name__)
@@ -52,8 +50,6 @@ class GeminiEngine(TranslateEngine):
             context_start = max(0, i - OVERLAP)
             batch = lines[context_start: i + BATCH_SIZE]
             translated = await self._translate_with_retry(batch, system_prompt)
-
-            # Buang bagian overlap dari hasil
             if i > 0:
                 translated = translated[OVERLAP:]
             results.extend(translated)
@@ -72,8 +68,6 @@ class GeminiEngine(TranslateEngine):
                     )
                 )
                 text = response.text.strip()
-
-                # Bersihkan markdown code block kalau ada
                 if text.startswith("```"):
                     text = re.sub(r"^```[a-z]*\n?", "", text)
                     text = re.sub(r"\n?```$", "", text)
@@ -81,8 +75,6 @@ class GeminiEngine(TranslateEngine):
                 parsed = json.loads(text)
                 if not isinstance(parsed, list):
                     raise ValueError("Response bukan JSON array")
-
-                # Validasi jumlah baris
                 if len(parsed) != len(batch):
                     logger.warning(f"Count mismatch: expected {len(batch)}, got {len(parsed)}. Fallback per-line.")
                     return await self._fallback_per_line(batch, system_prompt)
@@ -94,15 +86,11 @@ class GeminiEngine(TranslateEngine):
                 if "api key" in err_msg or "invalid" in err_msg:
                     raise ValueError(f"Gemini API key tidak valid: {e}")
                 if attempt < MAX_RETRIES - 1:
-                    wait = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
-                    logger.warning(f"Gemini error (attempt {attempt+1}): {e}. Retry in {wait}s...")
-                    await asyncio.sleep(wait)
+                    await asyncio.sleep(2 ** attempt)
                 else:
-                    logger.error(f"Gemini gagal setelah {MAX_RETRIES} percobaan: {e}")
                     return await self._fallback_per_line(batch, system_prompt)
 
     async def _fallback_per_line(self, batch: List[str], system_prompt: str) -> List[str]:
-        """Fallback: translate satu per satu kalau batch gagal."""
         results = []
         for line in batch:
             if not line.strip():
@@ -117,5 +105,5 @@ class GeminiEngine(TranslateEngine):
                 )
                 results.append(response.text.strip().strip('"'))
             except Exception:
-                results.append(line)  # kembalikan original kalau gagal total
+                results.append(line)
         return results
