@@ -211,16 +211,18 @@ export default function UploadPage() {
                     background: var(--bg); color: var(--text);
                 }
                 .upload-left {
-                    width: 40%; background: #0c0c0e; border-right: 1px solid var(--border);
-                    display: flex; flexDirection: column; padding: 32px;
+                    flex: 0 0 40%; max-width: 40%; background: #0c0c0e; border-right: 1px solid var(--border);
+                    display: flex; flex-direction: column; padding: 32px;
                     justify-content: space-between;
+                    box-sizing: border-box;
                 }
                 .upload-right {
-                    width: 60%; display: flex; flexDirection: column; padding: 32px;
+                    flex: 1; display: flex; flex-direction: column; padding: 32px;
                     overflow-y: auto; background: var(--bg);
+                    box-sizing: border-box;
                 }
                 .upload-form {
-                    display: flex; flexDirection: column; gap: 16px; height: 100%; maxWidth: 640px; margin: 0 auto; width: 100%;
+                    display: flex; flex-direction: column; gap: 16px; height: 100%; max-width: 640px; margin: 0 auto; width: 100%;
                 }
                 .upload-label {
                     font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
