@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
@@ -27,7 +28,19 @@ export default function EditorPage() {
         activeSegId, setActiveSegId,
         sidePanel, setSidePanel,
         loadProject, getStats,
-    } = useSubtiStore();
+    } = useSubtiStore(useShallow(state => ({
+        currentProject: state.currentProject,
+        segments: state.segments,
+        glossary: state.glossary,
+        filterStatus: state.filterStatus,
+        setFilter: state.setFilter,
+        activeSegId: state.activeSegId,
+        setActiveSegId: state.setActiveSegId,
+        sidePanel: state.sidePanel,
+        setSidePanel: state.setSidePanel,
+        loadProject: state.loadProject,
+        getStats: state.getStats,
+    })));
 
     const [showSubSource, setShowSubSource] = useState(false);
     const [videoTime, setVideoTime] = useState(0);

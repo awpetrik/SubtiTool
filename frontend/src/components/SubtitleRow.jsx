@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo } from 'react';
 import { Flag, Check, Edit2, Eye } from 'lucide-react';
 import useSubtiStore from '../store/useSubtiStore';
 import FlagModal from './FlagModal';
@@ -11,16 +11,21 @@ const STATUS_CFG = {
     approved: { label: 'Approved', color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
 };
 
-export default function SubtitleRow({ seg }) {
-    const {
-        activeSegId, editingId, editValue, selectedSegIds, flaggingId,
-        setActiveSegId, startEdit, cancelEdit, saveEdit, approve, setInReview, setFlaggingId
-    } = useSubtiStore();
+export default memo(function SubtitleRow({ seg }) {
+    const isActive = useSubtiStore(state => state.activeSegId === seg.id);
+    const isEditing = useSubtiStore(state => state.editingId === seg.id);
+    const editValue = useSubtiStore(state => state.editingId === seg.id ? state.editValue : '');
+    const isSelected = useSubtiStore(state => state.selectedSegIds.has(seg.id));
+    const showFlag = useSubtiStore(state => state.flaggingId === seg.id);
 
-    const isActive = activeSegId === seg.id;
-    const isEditing = editingId === seg.id;
-    const isSelected = selectedSegIds.has(seg.id);
-    const showFlag = flaggingId === seg.id;
+    const setActiveSegId = useSubtiStore(state => state.setActiveSegId);
+    const startEdit = useSubtiStore(state => state.startEdit);
+    const cancelEdit = useSubtiStore(state => state.cancelEdit);
+    const saveEdit = useSubtiStore(state => state.saveEdit);
+    const approve = useSubtiStore(state => state.approve);
+    const setInReview = useSubtiStore(state => state.setInReview);
+    const setFlaggingId = useSubtiStore(state => state.setFlaggingId);
+
     const cfg = STATUS_CFG[seg.status] || STATUS_CFG.pending;
 
     return (
@@ -141,7 +146,7 @@ export default function SubtitleRow({ seg }) {
             )}
         </>
     );
-}
+});
 
 function ActionBtn({ children, onClick, title, color }) {
     return (
