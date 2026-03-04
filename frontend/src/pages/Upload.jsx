@@ -1,5 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+    Hexagon, Edit3, Zap, Sparkles, Lock,
+    XCircle, CheckCircle2, FileText, AlertTriangle,
+    Circle, Loader2, RotateCcw
+} from 'lucide-react';
 
 const API = 'http://localhost:8000';
 
@@ -25,10 +30,10 @@ function parseTitle(filename) {
 }
 
 const ENGINES = [
-    { value: 'manual', label: '✏ Manual', desc: 'Upload SRT, terjemahkan sendiri di editor' },
-    { value: 'google_free', label: '⚡ Google Free', desc: 'Tanpa API key, cepat, gratis' },
-    { value: 'gemini', label: '✦ Gemini AI', desc: 'Kontekstual, kualitas terbaik' },
-    { value: 'libretranslate', label: '🔒 LibreTranslate', desc: 'Self-hosted, offline / private' },
+    { value: 'manual', label: <><Edit3 size={14} style={{ marginRight: 6, marginBottom: -2 }} /> Manual</>, desc: 'Upload SRT, terjemahkan sendiri di editor' },
+    { value: 'google_free', label: <><Zap size={14} style={{ marginRight: 6, marginBottom: -2 }} /> Google Free</>, desc: 'Tanpa API key, cepat, gratis' },
+    { value: 'gemini', label: <><Sparkles size={14} style={{ marginRight: 6, marginBottom: -2 }} /> Gemini AI</>, desc: 'Kontekstual, kualitas terbaik' },
+    { value: 'libretranslate', label: <><Lock size={14} style={{ marginRight: 6, marginBottom: -2 }} /> LibreTranslate</>, desc: 'Self-hosted, offline / private' },
 ];
 
 const LANG_FROM_OPTIONS = [
@@ -201,7 +206,10 @@ export default function UploadPage() {
         <div style={s.root}>
             {/* Logo */}
             <div style={s.logoWrap}>
-                <div style={s.logo}>⬡ SubtiTool</div>
+                <div style={s.logo}>
+                    <Hexagon size={28} fill="currentColor" style={{ marginRight: 8, marginBottom: -4 }} />
+                    SubtiTool
+                </div>
                 <p style={s.logoSub}>AI Subtitle Translator &amp; Editor</p>
             </div>
 
@@ -224,8 +232,10 @@ export default function UploadPage() {
                         style={{ display: 'none' }}
                         onChange={e => handleFile(e.target.files[0])}
                     />
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>
-                        {fileError ? '❌' : file ? '✅' : '📄'}
+                    <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+                        {fileError ? <XCircle size={32} color="var(--red)" /> :
+                            file ? <CheckCircle2 size={32} color="var(--green)" /> :
+                                <FileText size={32} color="var(--amber)" />}
                     </div>
                     {file ? (
                         <>
@@ -240,7 +250,7 @@ export default function UploadPage() {
                         </p>
                     )}
                 </div>
-                {fileError && <p style={s.inlineError}>⚠ {fileError}</p>}
+                {fileError && <p style={s.inlineError}><AlertTriangle size={12} style={{ marginRight: 4, marginBottom: -2 }} /> {fileError}</p>}
 
                 {/* ── Konteks Film ── */}
                 <div style={s.card}>
@@ -340,8 +350,8 @@ export default function UploadPage() {
                                 <button type="button" onClick={testLibre} style={s.btnSecondary}>
                                     {libreStatus === 'testing' ? '...' : 'Test'}
                                 </button>
-                                {libreStatus === 'ok' && <span style={{ color: 'var(--green)', fontSize: 18 }}>●</span>}
-                                {libreStatus === 'fail' && <span style={{ color: 'var(--red)', fontSize: 18 }}>●</span>}
+                                {libreStatus === 'ok' && <Circle size={10} fill="var(--green)" color="var(--green)" />}
+                                {libreStatus === 'fail' && <Circle size={10} fill="var(--red)" color="var(--red)" />}
                             </div>
                             {libreStatus === 'fail' && (
                                 <p style={{ color: 'var(--red)', fontSize: 11, marginTop: 4 }}>
@@ -356,8 +366,8 @@ export default function UploadPage() {
                 {phase === 'translating' && (
                     <div style={s.progBox}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                            <span style={{ color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 700 }}>
-                                ⟳ Translating...
+                            <span style={{ color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Loader2 size={16} /> Translating...
                             </span>
                             <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                                 {progress.processed} / {progress.total} baris ({pct}%)
@@ -377,10 +387,12 @@ export default function UploadPage() {
                 {/* ── Error state ── */}
                 {phase === 'error' && (
                     <div style={s.errorBox}>
-                        <p style={{ margin: '0 0 10px', color: 'var(--red)', fontWeight: 700 }}>⚠ Terjemahan Gagal</p>
+                        <p style={{ margin: '0 0 10px', color: 'var(--red)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <AlertTriangle size={16} /> Terjemahan Gagal
+                        </p>
                         <p style={{ margin: '0 0 14px', color: 'var(--text-dim)', fontSize: 12 }}>{submitError}</p>
                         <button type="button" onClick={handleRetry} style={s.btnRetry}>
-                            ↺ Coba Lagi
+                            <RotateCcw size={14} style={{ marginRight: 6, marginBottom: -2 }} /> Coba Lagi
                         </button>
                     </div>
                 )}
@@ -398,7 +410,9 @@ export default function UploadPage() {
                             color: isManual ? '#e5e7eb' : '#000',
                         }}
                     >
-                        {isManual ? '✏ Upload & Edit Manual' : '✦ Mulai Translate'}
+                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                            {isManual ? <><Edit3 size={16} /> Upload & Edit Manual</> : <><Sparkles size={16} /> Mulai Translate</>}
+                        </span>
                     </button>
                 )}
             </form>

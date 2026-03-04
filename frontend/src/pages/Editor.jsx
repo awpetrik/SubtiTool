@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
+import { Hexagon } from 'lucide-react';
 import SubSourceModal from '../components/SubSourceModal';
 
 const API = 'http://localhost:8000';
@@ -71,7 +72,9 @@ export default function EditorPage() {
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 16 }}>←</button>
-                    <span style={{ fontSize: 16, color: 'var(--amber)', fontWeight: 800, fontFamily: 'var(--display)', letterSpacing: -0.5 }}>⬡ SubtiTool</span>
+                    <span style={{ fontSize: 16, color: 'var(--amber)', fontWeight: 800, fontFamily: 'var(--display)', letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Hexagon size={16} fill="currentColor" /> SubtiTool
+                    </span>
                     <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{currentProject.title}</span>
                     <span style={{ fontSize: 11, background: 'var(--amber-dim)', color: 'var(--amber)', padding: '2px 8px', borderRadius: 3, border: '1px solid var(--amber-border)' }}>
                         {currentProject.lang_from?.toUpperCase()} → {currentProject.lang_to?.toUpperCase()}

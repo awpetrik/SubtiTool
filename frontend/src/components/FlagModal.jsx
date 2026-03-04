@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Flag } from 'lucide-react';
 import useSubtiStore from '../store/useSubtiStore';
 
 export default function FlagModal({ segId, initialNote, onClose }) {
@@ -13,8 +14,8 @@ export default function FlagModal({ segId, initialNote, onClose }) {
     return (
         <div style={overlay} onClick={onClose}>
             <div style={modal} onClick={e => e.stopPropagation()}>
-                <h3 style={{ margin: '0 0 4px', color: 'var(--red)', fontSize: 16, fontFamily: 'var(--display)' }}>
-                    ⚑ Flag for Review
+                <h3 style={{ margin: '0 0 4px', color: 'var(--red)', fontSize: 16, fontFamily: 'var(--display)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Flag size={16} fill="currentColor" /> Flag for Review
                 </h3>
                 <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: 12 }}>
                     Tambahkan catatan untuk reviewer

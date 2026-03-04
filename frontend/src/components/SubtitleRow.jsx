@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Flag, Check, Edit2, Eye } from 'lucide-react';
 import useSubtiStore from '../store/useSubtiStore';
 import FlagModal from './FlagModal';
 
@@ -75,7 +76,9 @@ export default function SubtitleRow({ seg }) {
                                 </p>
                             )}
                             {seg.flag_note && (
-                                <p style={{ margin: '4px 0 0', color: 'var(--red)', fontSize: 11 }}>⚑ {seg.flag_note}</p>
+                                <p style={{ margin: '4px 0 0', color: 'var(--red)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Flag size={12} fill="currentColor" /> {seg.flag_note}
+                                </p>
                             )}
                         </>
                     )}
@@ -96,13 +99,13 @@ export default function SubtitleRow({ seg }) {
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 4, paddingTop: 1, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                     {seg.status !== 'approved' && (
-                        <ActionBtn title="Approve" onClick={() => approve(seg.id)}>✓</ActionBtn>
+                        <ActionBtn title="Approve" onClick={() => approve(seg.id)}><Check size={14} /></ActionBtn>
                     )}
-                    <ActionBtn title="Edit" onClick={() => startEdit(seg)}>✎</ActionBtn>
+                    <ActionBtn title="Edit" onClick={() => startEdit(seg)}><Edit2 size={14} /></ActionBtn>
                     {seg.status !== 'in_review' && (
-                        <ActionBtn title="Tandai In Review" onClick={() => setInReview(seg.id)} color="#8b5cf6">👁</ActionBtn>
+                        <ActionBtn title="Tandai In Review" onClick={() => setInReview(seg.id)} color="#8b5cf6"><Eye size={14} /></ActionBtn>
                     )}
-                    <ActionBtn title="Flag" onClick={() => setShowFlag(true)} color="var(--red)">⚑</ActionBtn>
+                    <ActionBtn title="Flag" onClick={() => setShowFlag(true)} color="var(--red)"><Flag size={14} fill="currentColor" /></ActionBtn>
                 </div>
             </div>
 

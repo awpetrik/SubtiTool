@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import useSubtiStore from '../store/useSubtiStore';
 
 export default function TranslateProgress() {
@@ -8,8 +9,8 @@ export default function TranslateProgress() {
     return (
         <div style={{ padding: '20px 24px', background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 6 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <span style={{ fontFamily: 'var(--display)', color: 'var(--amber)', fontWeight: 700 }}>
-                    {status === 'error' ? '⚠ Error' : status === 'done' ? '✓ Selesai' : '⟳ Translating...'}
+                <span style={{ fontFamily: 'var(--display)', color: 'var(--amber)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {status === 'error' ? <><AlertTriangle size={14} /> Error</> : status === 'done' ? <><CheckCircle2 size={14} /> Selesai</> : <><Loader2 size={14} /> Translating...</>}
                 </span>
                 <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                     {processed} / {total} baris ({pct}%)
