@@ -11,12 +11,30 @@ const STATUS_CFG = {
     approved: { label: 'Approved', color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
 };
 
+function highlightGlossary(text, glossary) {
+    if (!text || !glossary || glossary.length === 0) return text;
+    // Sort terms by length desc to avoid partial matches
+    const sorted = [...glossary].sort((a, b) => b.source_term.length - a.source_term.length);
+    const validTerms = sorted.filter(g => g.source_term && g.source_term.trim() !== '');
+    if (validTerms.length === 0) return text;
+
+    const termsEscaped = validTerms.map(g => g.source_term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`\\b(${termsEscaped.join('|')})\\b`, 'gi');
+
+    return text.replace(regex, (match) => {
+        const entry = validTerms.find(g => g.source_term.toLowerCase() === match.toLowerCase());
+        if (!entry) return match;
+        return `<mark title="Glossary: ${entry.target_term}" style="background: rgba(245, 158, 11, 0.2); border-bottom: 1px dotted var(--amber); color: var(--text); border-radius: 2px; padding: 0 2px; cursor: help;">${match}</mark>`;
+    });
+}
+
 export default memo(function SubtitleRow({ seg }) {
     const isActive = useSubtiStore(state => state.activeSegId === seg.id);
     const isEditing = useSubtiStore(state => state.editingId === seg.id);
     const editValue = useSubtiStore(state => state.editingId === seg.id ? state.editValue : '');
     const isSelected = useSubtiStore(state => state.selectedSegIds.has(seg.id));
     const showFlag = useSubtiStore(state => state.flaggingId === seg.id);
+    const glossary = useSubtiStore(state => state.glossary);
 
     const setActiveSegId = useSubtiStore(state => state.setActiveSegId);
     const startEdit = useSubtiStore(state => state.startEdit);
@@ -55,7 +73,7 @@ export default memo(function SubtitleRow({ seg }) {
                 <div style={{ flex: 1 }}>
                     <p
                         style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.5 }}
-                        dangerouslySetInnerHTML={{ __html: seg.original }}
+                        dangerouslySetInnerHTML={{ __html: highlightGlossary(seg.original, glossary).replace(/\n/g, '<br/>') }}
                     />
                 </div>
 
@@ -112,7 +130,7 @@ export default memo(function SubtitleRow({ seg }) {
                             {seg.translation ? (
                                 <p
                                     style={{ margin: 0, color: 'var(--text)', lineHeight: 1.5 }}
-                                    dangerouslySetInnerHTML={{ __html: seg.translation }}
+                                    dangerouslySetInnerHTML={{ __html: highlightGlossary(seg.translation, glossary).replace(/\n/g, '<br/>') }}
                                 />
                             ) : (
                                 <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.5, fontStyle: 'italic' }}>

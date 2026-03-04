@@ -82,7 +82,7 @@ def update_segment(project_id: int, seg_id: int, payload: SegmentUpdate, db: Ses
     seg = db.query(Segment).filter(Segment.id == seg_id, Segment.project_id == project_id).first()
     if not seg:
         raise HTTPException(status_code=404, detail="Segment tidak ditemukan")
-    valid_statuses = {"pending", "ai_done", "flagged", "in_review", "approved"}
+    valid_statuses = {"pending", "ai_done", "flagged", "in_review", "approved", "skipped"}
     if payload.status and payload.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Status tidak valid. Pilihan: {valid_statuses}")
     for field, value in payload.dict(exclude_none=True).items():
