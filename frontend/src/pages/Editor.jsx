@@ -218,9 +218,54 @@ export default function EditorPage() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [activeSegId, filtered, activeIndex]);
 
+    const timecodeToSeconds = (tc) => {
+        if (!tc) return 0;
+        const [hms, ms] = tc.replace(',', '.').split(/[.,]/);
+        if (!hms) return 0;
+        const parts = hms.split(':').map(Number);
+        const h = parts[0] || 0, m = parts[1] || 0, s = parts[2] || 0;
+        return h * 3600 + m * 60 + s + (ms ? Number(ms) / 1000 : 0);
+    };
+
+    // Keep refs of current state for the setInterval
+    const activeSegRef = useRef(null);
+    const filteredRef = useRef([]);
+
+    useEffect(() => {
+        activeSegRef.current = activeSegment;
+        filteredRef.current = filtered;
+    }, [activeSegment, filtered]);
+
+    // Jump video to start of segment when active segment changes
+    useEffect(() => {
+        if (activeSegment && !isPlaying) {
+            setVideoTime(timecodeToSeconds(activeSegment.timecode_start));
+        }
+    }, [activeSegId, activeSegment]);
+
     useEffect(() => {
         if (isPlaying) {
-            timerRef.current = setInterval(() => setVideoTime(t => (t + 0.1) % 600), 100);
+            timerRef.current = setInterval(() => {
+                setVideoTime(t => {
+                    const newT = t + 0.1;
+
+                    // Auto-advance segment if video crosses its end time
+                    const seg = activeSegRef.current;
+                    const list = filteredRef.current;
+                    if (seg && list.length > 0) {
+                        const endSec = timecodeToSeconds(seg.timecode_end);
+                        if (newT >= endSec + 0.1) {
+                            const curIdx = list.findIndex(s => s.id === seg.id);
+                            if (curIdx >= 0 && curIdx < list.length - 1) {
+                                useSubtiStore.getState().setActiveSegId(list[curIdx + 1].id);
+                            } else {
+                                setIsPlaying(false); // Stop if EOF
+                            }
+                        }
+                    }
+                    return newT;
+                });
+            }, 100);
         } else {
             clearInterval(timerRef.current);
         }
@@ -314,10 +359,10 @@ export default function EditorPage() {
                             <button onClick={() => setIsPlaying(p => !p)} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
                                 {isPlaying ? '⏸' : '▶'}
                             </button>
-                            <div style={{ flex: 1, height: 4, background: 'var(--bg-2)', borderRadius: 2, overflow: 'hidden', cursor: 'pointer' }}>
-                                <div style={{ height: '100%', background: 'var(--amber)', width: `${(videoTime / 600) * 100}%`, transition: 'width 0.1s linear' }} />
+                            <div title="Current Video Time (Mockup synced to SRT)" style={{ flex: 1, height: 4, background: 'var(--bg-2)', borderRadius: 2, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', background: 'var(--amber)', width: `${Math.min(100, (videoTime / (timecodeToSeconds(filtered[filtered.length - 1]?.timecode_end) || 600)) * 100)}%`, transition: 'width 0.1s linear' }} />
                             </div>
-                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtTime(videoTime)}</span>
+                            <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
                         </div>
                     </div>
 
