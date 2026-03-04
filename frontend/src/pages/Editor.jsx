@@ -19,6 +19,20 @@ const STATUS_CFG = {
 
 const FILTERS = ['all', 'ai_done', 'flagged', 'in_review', 'approved', 'pending'];
 
+import { memo } from 'react';
+
+const SubtitleList = memo(function SubtitleList({ segments, filterStatus }) {
+    const filtered = filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
+    if (filtered.length === 0) {
+        return (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                Tidak ada segment dengan filter ini.
+            </div>
+        );
+    }
+    return filtered.map(seg => <SubtitleRow key={seg.id} seg={seg} />);
+});
+
 export default function EditorPage() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -54,9 +68,8 @@ export default function EditorPage() {
     const [showShortcuts, setShowShortcuts] = useState(false);
     const lastKeyRef = useRef('');
 
-    useEffect(() => { if (id) loadProject(parseInt(id)); }, [id]);
-
     const stats = getStats();
+    // filtered is still calculated here for navigation math, but UI list generation is skipped
     const filtered = filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
     const pctApproved = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0;
     const activeSegment = activeSegId ? segments.find(s => s.id === activeSegId) : null;
@@ -361,13 +374,7 @@ export default function EditorPage() {
                         <span style={{ width: 116 }}>AKSI</span>
                     </div>
 
-                    {filtered.length === 0 ? (
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                            Tidak ada segment dengan filter ini.
-                        </div>
-                    ) : (
-                        filtered.map(seg => <SubtitleRow key={seg.id} seg={seg} />)
-                    )}
+                    <SubtitleList segments={segments} filterStatus={filterStatus} />
                 </main>
             </div>
 
