@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
-import { Hexagon, HelpCircle, X } from 'lucide-react';
+import { Hexagon, HelpCircle, X, BookOpen, BarChart2, Filter } from 'lucide-react';
 import SubSourceModal from '../components/SubSourceModal';
 
 const API = 'http://localhost:8000';
@@ -182,7 +182,7 @@ export default function EditorPage() {
     );
 
     return (
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
+        <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
             {/* ── HEADER ── */}
             <header style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -233,48 +233,50 @@ export default function EditorPage() {
 
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden', height: 'calc(100vh - 52px)' }}>
                 {/* ── LEFT PANEL ── */}
-                <aside style={{ width: 250, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0 }}>
+                <aside style={{ width: 260, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0, background: 'var(--bg-1)' }}>
                     {/* Video mockup */}
-                    <div style={{ borderBottom: '1px solid var(--border)' }}>
-                        <div style={{ height: 140, background: '#050505', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                    <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ height: 130, background: '#050505', borderRadius: 6, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
                             {/* Grain texture */}
                             <div style={{ position: 'absolute', inset: 0, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E\")", opacity: 0.5 }} />
                             <div style={{ position: 'absolute', top: 8, left: 10, fontSize: 10, color: '#333' }}>{currentProject.title}</div>
-                            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.8))' }} />
+                            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, rgba(0,0,0,0.9))' }} />
                             {activeSegment?.translation && (
-                                <div style={{ position: 'relative', zIndex: 2, color: '#fff', fontSize: 12, textAlign: 'center', padding: '4px 10px 10px', textShadow: '0 1px 4px #000', fontFamily: 'sans-serif' }}
+                                <div style={{ position: 'relative', zIndex: 2, color: '#fff', fontSize: 13, textAlign: 'center', padding: '4px 12px 12px', textShadow: '0 1px 4px #000', fontFamily: 'sans-serif' }}
                                     dangerouslySetInnerHTML={{ __html: activeSegment.translation }}
                                 />
                             )}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg-1)' }}>
-                            <button onClick={() => setIsPlaying(p => !p)} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--amber)', width: 26, height: 26, borderRadius: '50%', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+                            <button onClick={() => setIsPlaying(p => !p)} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
                                 {isPlaying ? '⏸' : '▶'}
                             </button>
-                            <div style={{ flex: 1, height: 3, background: 'var(--bg-2)', borderRadius: 2, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', background: 'var(--amber)', width: `${(videoTime / 600) * 100}%` }} />
+                            <div style={{ flex: 1, height: 4, background: 'var(--bg-2)', borderRadius: 2, overflow: 'hidden', cursor: 'pointer' }}>
+                                <div style={{ height: '100%', background: 'var(--amber)', width: `${(videoTime / 600) * 100}%`, transition: 'width 0.1s linear' }} />
                             </div>
-                            <span style={{ fontSize: 10, color: '#555' }}>{fmtTime(videoTime)}</span>
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtTime(videoTime)}</span>
                         </div>
                     </div>
 
                     {/* Filter pills */}
-                    <div style={{ padding: '12px 10px 8px' }}>
-                        <p style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginBottom: 8 }}>FILTER</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <div style={{ padding: '16px 16px 12px' }}>
+                        <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, marginBottom: 12, fontWeight: 700 }}><Filter size={12} /> FILTER</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {FILTERS.map(f => {
                                 const cfg = STATUS_CFG[f];
                                 const count = f === 'all' ? stats.total : stats[f];
                                 const active = filterStatus === f;
                                 return (
                                     <button key={f} onClick={() => setFilter(f)} style={{
-                                        textAlign: 'left', padding: '5px 10px', borderRadius: 3, fontSize: 11,
-                                        border: `1px solid ${active ? (cfg?.color || 'var(--amber)') : 'var(--border)'}`,
+                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                        padding: '7px 12px', borderRadius: 4, fontSize: 12,
+                                        border: `1px solid ${active ? (cfg?.color || 'var(--amber)') : 'transparent'}`,
                                         background: active ? (cfg?.bg || 'rgba(255,255,255,0.08)') : 'transparent',
                                         color: active ? (cfg?.color || 'var(--text)') : 'var(--text-muted)',
                                         transition: 'all 0.15s',
                                     }}>
-                                        {f === 'all' ? `All (${count})` : `${cfg.label} (${count})`}
+                                        <span>{f === 'all' ? 'All' : cfg.label}</span>
+                                        <span style={{ fontSize: 10, background: active ? 'transparent' : 'var(--bg-2)', padding: '2px 6px', borderRadius: 10, color: active ? 'currentColor' : '#555' }}>{count}</span>
                                     </button>
                                 );
                             })}
@@ -282,38 +284,46 @@ export default function EditorPage() {
                     </div>
 
                     {/* Glossary / Stats tabs */}
-                    <div style={{ display: 'flex', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', marginTop: 4 }}>
-                        {['glossary', 'stats'].map(p => (
-                            <button key={p} onClick={() => setSidePanel(p)} style={{
-                                flex: 1, background: 'none', border: 'none', padding: '7px 0',
-                                fontSize: 11, color: sidePanel === p ? 'var(--amber)' : 'var(--text-muted)',
-                                borderBottom: sidePanel === p ? '2px solid var(--amber)' : '2px solid transparent',
-                                transition: 'all 0.15s',
-                            }}>
-                                {p === 'glossary' ? '📖 Glossary' : '📊 Stats'}
-                            </button>
-                        ))}
-                    </div>
-
-                    {sidePanel === 'glossary' ? (
-                        <GlossaryPanel />
-                    ) : (
-                        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {Object.entries(stats).filter(([k]) => k !== 'total').map(([k, v]) => {
-                                const cfg = STATUS_CFG[k];
-                                return (
-                                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: cfg?.dot, flexShrink: 0 }} />
-                                        <span style={{ color: 'var(--text-muted)', fontSize: 12, flex: 1 }}>{cfg?.label || k}</span>
-                                        <div style={{ width: 60, height: 3, background: 'var(--bg-2)', borderRadius: 2, overflow: 'hidden' }}>
-                                            <div style={{ height: '100%', borderRadius: 2, background: cfg?.dot, width: `${stats.total > 0 ? (v / stats.total) * 100 : 0}%`, transition: 'width 0.5s' }} />
-                                        </div>
-                                        <span style={{ color: 'var(--text)', fontSize: 12, minWidth: 20, textAlign: 'right' }}>{v}</span>
-                                    </div>
-                                );
-                            })}
+                    <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', background: 'var(--bg-2)', borderRadius: 6, padding: 3, marginTop: 16, marginBottom: 16 }}>
+                            {[
+                                { id: 'glossary', label: 'Glossary', icon: <BookOpen size={12} /> },
+                                { id: 'stats', label: 'Stats', icon: <BarChart2 size={12} /> }
+                            ].map(p => (
+                                <button key={p.id} onClick={() => setSidePanel(p.id)} style={{
+                                    flex: 1, background: sidePanel === p.id ? 'var(--bg-1)' : 'transparent', border: 'none', padding: '6px 0',
+                                    fontSize: 11, color: sidePanel === p.id ? 'var(--amber)' : 'var(--text-muted)',
+                                    borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                    boxShadow: sidePanel === p.id ? '0 1px 3px rgba(0,0,0,0.4)' : 'none',
+                                    transition: 'all 0.15s',
+                                }}>
+                                    {p.icon} {p.label}
+                                </button>
+                            ))}
                         </div>
-                    )}
+
+                        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingRight: 4 }}>
+                            {sidePanel === 'glossary' ? (
+                                <GlossaryPanel />
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    {Object.entries(stats).filter(([k]) => k !== 'total').map(([k, v]) => {
+                                        const cfg = STATUS_CFG[k];
+                                        return (
+                                            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: cfg?.dot, flexShrink: 0 }} />
+                                                <span style={{ color: 'var(--text-muted)', fontSize: 12, flex: 1 }}>{cfg?.label || k}</span>
+                                                <div style={{ width: 60, height: 4, background: 'var(--bg-2)', borderRadius: 2, overflow: 'hidden' }}>
+                                                    <div style={{ height: '100%', borderRadius: 2, background: cfg?.dot, width: `${stats.total > 0 ? (v / stats.total) * 100 : 0}%`, transition: 'width 0.5s' }} />
+                                                </div>
+                                                <span style={{ color: 'var(--text)', fontSize: 11, minWidth: 20, textAlign: 'right' }}>{v}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </aside>
 
                 {/* ── MAIN EDITOR ── */}
