@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -42,6 +42,7 @@ def _get_engine(engine_name: str, gemini_key: Optional[str]):
 
 @router.post("")
 async def start_translate(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str = Form(...),
     genre: str = Form(""),
@@ -59,6 +60,10 @@ async def start_translate(
         raw = content.decode("latin-1")
 
     segments_data = parse_srt(raw)
+    print(f"DEBUG: decoded {len(raw)} chars, parsed {len(segments_data)} segments")
+    if segments_data:
+        print(f"DEBUG: first segment → index={segments_data[0]['index']}, text={repr(segments_data[0]['original'][:60])}")
+
     if not segments_data:
         raise HTTPException(status_code=400, detail="File SRT tidak valid atau kosong.")
 
@@ -83,6 +88,7 @@ async def start_translate(
             status="pending",
         ))
     db.commit()
+    print(f"DEBUG: inserted {len(segments_data)} segments into DB for project_id={project.id}")
 
     # Buat background job
     job_id = str(uuid.uuid4())
@@ -94,7 +100,8 @@ async def start_translate(
         "logs": [],
     }
 
-    asyncio.create_task(_run_translate_job(
+    background_tasks.add_task(
+        _run_translate_job,
         job_id=job_id,
         project_id=project.id,
         segments_data=segments_data,
@@ -102,13 +109,12 @@ async def start_translate(
                  "lang_from": lang_from, "lang_to": lang_to},
         engine_name=engine,
         gemini_key=gemini_api_key,
-        db_session_factory=None,  # re-create db session in background
-    ))
+    )
 
     return {"job_id": job_id, "project_id": project.id, "total": len(segments_data)}
 
 
-async def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key, db_session_factory):
+async def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key):
     from db import SessionLocal
     db = SessionLocal()
     job = _jobs[job_id]
