@@ -4,10 +4,7 @@
 > SubtiTool is currently in active early-stage development. It is **not fully functional yet** and you may encounter bugs, incomplete features, or breaking changes. Use at your own risk!
 
 <div align="center">
-  <br>
-  <img width="1080" height="1080" alt="subtitool" src="https://github.com/user-attachments/assets/3ac29975-a38d-406a-b27f-d4ab3ba36d66" />
-  <br>
-  <br>
+<img width="1080" height="250" alt="Subtitool" src="https://github.com/user-attachments/assets/b51bf567-3b00-44b6-865e-dba3f5f27b0f" />
 </div>
 
 <div align="center">
