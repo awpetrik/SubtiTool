@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import SubtiToolLogo from '../components/SubtiToolLogo';
 
-const API = 'http://localhost:8000';
+const API = 'http://localhost:8001';
 
 const RELEASE_TAGS = /[._-](1080p|720p|480p|2160p|4K|AMZN|WEB[_.-]?DL|WEBDL|WEBRip|BluRay|BDRip|DVDRip|DDP?[\d.]*|Atmos|H[._]?264|H[._]?265|HEVC|HDR10?[+]?|SDR|DTS[-.]?HD|DTS|AAC[\d.]*|x264|x265|NF|HULU|DSNP|ATVP|MAX|PCOK|REPACK|PROPER|IMAX|REMUX)(?=[._-]|$)/gi;
 

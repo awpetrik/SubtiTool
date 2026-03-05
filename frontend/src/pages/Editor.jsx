@@ -15,7 +15,7 @@ import { Menu, Item, Separator } from 'react-contexify';
 import 'react-contexify/dist/ReactContexify.css';
 import { VariableSizeList } from 'react-window';
 
-const API = 'http://localhost:8000';
+const API = 'http://localhost:8001';
 
 const timecodeToSeconds = (tc) => {
     if (!tc) return 0;

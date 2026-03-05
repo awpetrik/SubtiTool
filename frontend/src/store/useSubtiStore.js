@@ -28,7 +28,7 @@ export const secondsToTimecode = (seconds) => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
 };
 
-const API = 'http://localhost:8000';
+const API = 'http://localhost:8001';
 
 // Retry dengan exponential backoff — max 3 attempts, start 500ms
 async function fetchWithRetry(url, options, maxRetries = 3) {
