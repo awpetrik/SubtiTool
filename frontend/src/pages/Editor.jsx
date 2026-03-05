@@ -998,12 +998,16 @@ const Viewfinder = memo(({
             ) : (
                 <div style={{ height: 140, background: 'var(--bg-2)', borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', padding: 16, textAlign: 'center', gap: 10 }}>
                     {isConvertingProxy ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%', padding: '0 40px' }}>
-                            <div style={{ fontSize: 13, color: 'var(--amber)', fontWeight: 600 }}>
-                                {convertStatus?.status === 'uploading' ? 'Mengunggah file...' : 'Mengonversi (Proxy 480p)...'}
-                                {convertStatus?.progress}%
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, width: '100%', padding: '0 16px' }}>
+                            <div style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600, textAlign: 'center', lineHeight: 1.4, letterSpacing: 0.5 }}>
+                                {convertStatus?.status === 'uploading' ? (
+                                    <>Mengunggah file...</>
+                                ) : (
+                                    <>Mengonversi<span style={{ display: 'block', fontSize: 10, opacity: 0.8 }}>(Proxy 480p)</span></>
+                                )}
+                                <span style={{ display: 'block', fontSize: 18, marginTop: 4 }}>{convertStatus?.progress}%</span>
                             </div>
-                            <div style={{ width: '100%', height: 6, background: 'var(--bg-1)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
                                 <div style={{
                                     height: '100%',
                                     background: 'var(--amber)',
@@ -1011,7 +1015,7 @@ const Viewfinder = memo(({
                                     transition: 'width 0.3s linear'
                                 }} />
                             </div>
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Proses ini berjalan di latar belakang. Anda bisa bekerja fitur lain.</span>
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.3 }}>Berjalan di memori latar.<br />Silakan kerjakan fitur lain.</span>
                         </div>
                     ) : (
                         <>
