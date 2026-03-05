@@ -625,7 +625,7 @@ export default function UploadPage() {
                     <div className="upload-card">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
                             <Globe size={20} color="#f59e0b" />
-                            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: 1 }}>Terjemahan</h2>
+                            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: 1 }}>{t.translationLabel}</h2>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
