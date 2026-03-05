@@ -5,6 +5,7 @@ import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
 import { HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp, Trash2, CheckSquare, XSquare, Wand2 } from 'lucide-react';
+import SubtiToolLogo from '../components/SubtiToolLogo';
 import SubSourceModal from '../components/SubSourceModal';
 import FindReplaceModal from '../components/FindReplaceModal';
 import { ProjectToolbar } from '../components/ProjectToolbar';
