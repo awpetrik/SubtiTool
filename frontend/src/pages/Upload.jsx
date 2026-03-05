@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import {
     Hexagon, Edit3, Zap, Sparkles, Lock,
     XCircle, CheckCircle2, FileText, AlertTriangle,
-    Circle, Loader2, RotateCcw, ArrowRight, UploadCloud
+    Circle, Loader2, RotateCcw, ArrowRight, UploadCloud,
+    Settings2, Globe, PenTool, Terminal, ChevronRight, Music, VolumeX, Lightbulb,
+    FolderOpen, Trash2, Play, Clock, Plus, ChevronDown
 } from 'lucide-react';
 
 const API = 'http://localhost:8000';
@@ -26,10 +28,10 @@ function parseTitle(filename) {
 }
 
 const ENGINES = [
-    { value: 'manual', icon: <Edit3 size={12} />, label: 'Manual' },
-    { value: 'google_free', icon: <Zap size={12} />, label: 'Google Free' },
-    { value: 'gemini', icon: <Sparkles size={12} />, label: 'Gemini AI' },
-    { value: 'libretranslate', icon: <Lock size={12} />, label: 'LibreTranslate' },
+    { value: 'manual', icon: <PenTool size={16} />, label: 'Manual' },
+    { value: 'google_free', icon: <Globe size={16} />, label: 'Google' },
+    { value: 'gemini', icon: <Sparkles size={16} />, label: 'Gemini AI' },
+    { value: 'libretranslate', icon: <Terminal size={16} />, label: 'Libre' },
 ];
 
 const LANG_FROM_OPTIONS = [
@@ -76,11 +78,29 @@ export default function UploadPage() {
     const [phase, setPhase] = useState('idle'); // idle | translating | error
     const [progress, setProgress] = useState({ processed: 0, total: 0, logs: [] });
     const [submitError, setSubmitError] = useState('');
+    const [projectId, setProjectId] = useState(null);
 
     const [tipIdx, setTipIdx] = useState(0);
+    const [projects, setProjects] = useState([]);
+    const [showNewProject, setShowNewProject] = useState(false);
+
+    const fetchProjects = async () => {
+        try {
+            const res = await fetch(`${API}/api/projects`);
+            if (res.ok) setProjects(await res.json());
+        } catch { }
+    };
+
+    const handleDeleteProject = async (e, pid) => {
+        e.stopPropagation();
+        if (!confirm('Hapus project ini? Semua data terjemahan akan hilang permanen.')) return;
+        await fetch(`${API}/api/projects/${pid}`, { method: 'DELETE' });
+        setProjects(prev => prev.filter(p => p.id !== pid));
+    };
 
     useEffect(() => {
         const t = setInterval(() => setTipIdx(i => (i + 1) % TIPS.length), 4000);
+        fetchProjects();
         return () => clearInterval(t);
     }, []);
 
@@ -94,6 +114,7 @@ export default function UploadPage() {
             return;
         }
         setFile(f);
+        setProjectId(null);
         setForm(prev => ({ ...prev, title: prev.title || parseTitle(f.name) }));
 
         // Count lines roughly
@@ -161,8 +182,13 @@ export default function UploadPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        // Guard: jangan izinkan submit ganda
+        if (phase === 'translating') return;
+        if (!file) { setSubmitError('Pilih file SRT terlebih dahulu.'); return; }
+
         setSubmitError('');
         setProgress({ processed: 0, total: 0, logs: [] });
+        setProjectId(null);
 
         if (engine === 'gemini') localStorage.setItem('gemini_key', geminiKey);
         if (engine === 'libretranslate') localStorage.setItem('libre_url', libreUrl);
@@ -193,6 +219,7 @@ export default function UploadPage() {
                 navigate(`/editor/${data.project_id}`);
                 return;
             }
+            setProjectId(data.project_id);
             setProgress(prev => ({ ...prev, total: data.total }));
             listenProgress(data.job_id, data.project_id);
         } catch (err) {
@@ -201,163 +228,342 @@ export default function UploadPage() {
         }
     };
 
+    const handleResume = async () => {
+        if (!projectId) return;
+        setSubmitError('');
+        setPhase('translating');
+        try {
+            const fd = new FormData();
+            fd.append('gemini_api_key', engine === 'gemini' ? geminiKey : '');
+
+            const res = await fetch(`${API}/api/translate/${projectId}/resume`, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok) {
+                setPhase('error');
+                setSubmitError(data.detail || `Error ${res.status}`);
+                return;
+            }
+            if (!data.job_id) {
+                navigate(`/editor/${data.project_id}`);
+                return;
+            }
+            listenProgress(data.job_id, data.project_id);
+        } catch (err) {
+            setPhase('error');
+            setSubmitError(`Koneksi terputus: ${err.message}`);
+        }
+    };
+
     const pct = progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
+    const [showAllProjects, setShowAllProjects] = useState(false);
+    const visibleProjects = showAllProjects ? projects : projects.slice(0, 5);
 
     return (
         <div className="upload-container">
             <style>{`
                 .upload-container {
                     display: flex; height: 100vh; overflow: hidden;
-                    background: var(--bg); color: var(--text);
+                    background: #09090b; color: #d4d4d8; font-family: var(--mono);
                 }
                 .upload-left {
-                    flex: 0 0 40%; max-width: 40%; background: #0c0c0e; border-right: 1px solid var(--border);
-                    display: flex; flex-direction: column; padding: 32px;
-                    justify-content: center; align-items: center;
-                    box-sizing: border-box;
+                    flex: 0 0 34%; max-width: 34%; height: 100vh;
+                    display: flex; flex-direction: column;
+                    box-sizing: border-box; border-right: 1px solid #18181b;
+                    position: sticky; top: 0; overflow: hidden;
+                }
+                .upload-left-header {
+                    padding: 28px 24px 20px; flex-shrink: 0;
+                    border-bottom: 1px solid #111113;
+                }
+                .upload-left-scroll {
+                    flex: 1; overflow-y: auto; padding: 16px 16px 0;
+                }
+                .upload-left-footer {
+                    padding: 14px 20px; flex-shrink: 0;
+                    border-top: 1px solid #111113;
                 }
                 .upload-right {
-                    flex: 1; display: flex; flex-direction: column; padding: 32px;
-                    overflow-y: auto; background: var(--bg);
+                    flex: 1; height: 100vh; overflow-y: auto;
+                    padding: 32px 36px;
                     box-sizing: border-box;
                 }
                 .upload-form {
-                    display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; width: 100%;
-                    justify-content: space-between;
+                    display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 640px; margin: 0 auto;
+                }
+                .upload-card {
+                    background: rgba(24, 24, 27, 0.8); border: 1px solid #27272a; border-radius: 12px;
+                    padding: 20px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
                 }
                 .upload-label {
-                    font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
-                    color: var(--amber); margin-bottom: 4px; display: block; font-weight: 700;
+                    font-size: 10px; font-weight: 600; color: #52525b; margin-left: 2px; margin-bottom: 5px; display: block;
+                    text-transform: uppercase; letter-spacing: 0.5px;
                 }
                 .upload-input {
-                    width: 100%; height: 36px; padding: 0 12px; background: var(--bg-1);
-                    border: 1px solid var(--border); color: #fff; border-radius: 4px;
-                    font-size: 13px; box-sizing: border-box; outline: none; transition: border 0.2s;
+                    width: 100%; padding: 10px 14px; background: #0c0c0e;
+                    border: 1px solid #27272a; color: #fff; border-radius: 8px;
+                    font-size: 13px; box-sizing: border-box; outline: none; transition: all 0.2s;
                 }
-                .upload-input:focus { border-color: var(--amber); }
-                .upload-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+                .upload-input:focus { border-color: rgba(245, 158, 11, 0.5); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1); }
+                .upload-input::placeholder { color: #3f3f46; }
+                
+                .upload-grid3 { display: grid; grid-template-columns: 1fr; gap: 12px; }
+                @media (min-width: 768px) {
+                    .upload-grid3 { grid-template-columns: 1fr 1fr; }
+                    .title-span { grid-column: span 2; }
+                }
+
                 .engine-tabs {
-                    display: flex; gap: 4px; background: var(--bg-1); padding: 4px;
-                    border-radius: 6px; border: 1px solid var(--border);
+                    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; background: #0c0c0e; padding: 4px;
+                    border-radius: 8px; border: 1px solid #27272a;
                 }
                 .engine-tab {
-                    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-                    height: 32px; font-size: 11px; font-weight: 600; cursor: pointer;
-                    border-radius: 4px; transition: all 0.2s; border: none;
+                    display: flex; align-items: center; justify-content: center; gap: 6px;
+                    padding: 7px 10px; font-size: 13px; font-weight: 500; cursor: pointer;
+                    border-radius: 6px; transition: all 0.15s; border: none;
                 }
-                .engine-tab.active { background: var(--amber); color: #000; }
-                .engine-tab.inactive { background: transparent; color: var(--text-muted); }
-                .engine-tab.inactive:hover { background: var(--bg-2); color: var(--text); }
+                .engine-tab.active { background: #f59e0b; color: #09090b; }
+                .engine-tab.inactive { background: transparent; color: #71717a; }
+                .engine-tab.inactive:hover { background: #18181b; color: #e4e4e7; }
                 
-                @media (max-width: 768px) {
+                @media (max-width: 900px) {
                     .upload-container { flex-direction: column; height: auto; overflow: visible; }
-                    .upload-left, .upload-right { width: 100%; padding: 20px; }
-                    .upload-left { min-height: 50vh; border-right: none; border-bottom: 1px solid var(--border); }
-                    .upload-grid3 { grid-template-columns: 1fr; }
-                    .engine-tabs { flex-wrap: wrap; }
+                    .upload-left { flex: none; width: 100%; max-width: 100%; height: auto; padding: 28px 24px; position: relative; border-right: none; border-bottom: 1px solid #18181b; }
+                    .upload-right { flex: none; width: 100%; height: auto; overflow-y: visible; padding: 24px; }
+                    .engine-tabs { grid-template-columns: 1fr 1fr; }
                 }
 
                 .drop-zone {
-                    width: 100%; height: 180px; flex-shrink: 0;
-                    border: 2px dashed var(--border); border-radius: 8px;
+                    width: 100%; min-height: 220px; flex-shrink: 0; position: relative;
+                    border: 1.5px dashed #27272a; border-radius: 14px; background: rgba(18,18,20,0.6);
                     display: flex; flex-direction: column; align-items: center; justify-content: center;
-                    cursor: pointer; transition: all 0.2s; text-align: center; box-sizing: border-box;
+                    cursor: pointer; transition: all 0.25s; padding: 28px;
                 }
-                .drop-zone:hover { border-color: var(--amber); background: rgba(245,158,11,0.03); }
-                .drop-zone.active { border-color: var(--amber); background: rgba(245,158,11,0.08); }
-                .drop-zone.error { border-color: var(--red); background: rgba(239,68,68,0.05); }
+                .drop-zone:hover { border-color: rgba(245, 158, 11, 0.4); background: rgba(24,24,27,0.9); }
+                .drop-zone.active { border-color: #f59e0b; background: rgba(245, 158, 11, 0.06); }
+                .drop-zone.error { border-color: #ef4444; background: rgba(239, 68, 68, 0.04); }
+
+                .proj-card {
+                    display: flex; align-items: center; gap: 12px;
+                    background: #111113; border: 1px solid #1e1e22;
+                    border-radius: 10px; padding: 11px 14px; cursor: pointer;
+                    transition: border-color 0.15s, background 0.15s;
+                }
+                .proj-card:hover { border-color: rgba(245,158,11,0.35); background: #161618; }
 
                 .btn-submit {
-                    height: 44px; width: 100%; border: none; border-radius: 6px;
-                    font-size: 14px; font-weight: 800; font-family: var(--display);
-                    cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
-                    position: relative; overflow: hidden;
+                    width: 100%; border: none; border-radius: 12px; padding: 16px;
+                    font-size: 16px; font-weight: 700; background: #f59e0b; color: #09090b;
+                    cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+                    position: relative; overflow: hidden; box-shadow: 0 8px 20px rgba(245, 158, 11, 0.2);
+                }
+                .btn-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(245, 158, 11, 0.3); background: #fbbf24; }
+                .btn-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+                
+                .checkbox-box {
+                    width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+                    border: 1px solid #3f3f46; background: #09090b; transition: all 0.15s; flex-shrink: 0;
+                }
+                .checkbox-box.checked { background: #f59e0b; border-color: #f59e0b; color: #09090b; }
+                .section-divider {
+                    display: flex; align-items: center; gap: 12px; margin: 24px 0 20px;
+                    max-width: 640px; margin-left: auto; margin-right: auto;
+                }
+                .section-divider::before, .section-divider::after {
+                    content: ''; flex: 1; height: 1px; background: #1e1e22;
                 }
             `}</style>
 
             {/* ── LEFT PANEL ── */}
             <div className="upload-left">
-                <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                        <div style={{ fontSize: 28, color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                            <Hexagon size={24} fill="currentColor" /> SubtiTool
-                        </div>
-                        <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 12 }}>Next-Gen AI Subtitle Workflow</p>
+                {/* Header: brand */}
+                <div className="upload-left-header">
+                    <div style={{ fontSize: 22, color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <Hexagon size={20} fill="currentColor" /> SubtiTool
                     </div>
+                    <p style={{ color: '#3f3f46', margin: '3px 0 0', fontSize: 11 }}>AI Subtitle Workflow</p>
+                </div>
 
-                    {!file ? (
-                        <div
-                            className={`drop-zone ${dragOver ? 'active' : ''} ${fileError ? 'error' : ''}`}
-                            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                            onDragLeave={() => setDragOver(false)}
-                            onDrop={handleDrop}
-                            onClick={() => fileRef.current?.click()}
-                        >
-                            <input ref={fileRef} type="file" accept=".srt" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
-                            <UploadCloud size={32} color={fileError ? 'var(--red)' : 'var(--amber)'} style={{ marginBottom: 12, opacity: 0.8 }} />
-                            <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text)' }}>
-                                Drag & Drop file SRT ke area ini
-                            </p>
-                            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-dim)' }}>Atau klik untuk browse file dari komputer</p>
-                            {fileError && <p style={{ color: 'var(--red)', fontSize: 11, marginTop: 12, fontWeight: 600 }}>{fileError}</p>}
+                {/* Scrollable project list */}
+                <div className="upload-left-scroll">
+                    {projects.length === 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, opacity: 0.35 }}>
+                            <FolderOpen size={28} color="#52525b" />
+                            <p style={{ margin: 0, fontSize: 12, color: '#52525b', textAlign: 'center' }}>Belum ada proyek tersimpan</p>
                         </div>
                     ) : (
-                        <div style={{
-                            width: '100%', height: 56, background: 'var(--bg-1)', border: '1px solid var(--border)',
-                            borderRadius: 8, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, boxSizing: 'border-box'
-                        }}>
-                            <FileText size={20} color="var(--green)" style={{ flexShrink: 0 }} />
-                            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <p style={{ margin: 0, fontSize: 13, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</p>
-                                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
-                                    {(file.size / 1024).toFixed(1)} KB &bull; ~{lineCount} baris
-                                </p>
+                        <>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: '#3f3f46', textTransform: 'uppercase', letterSpacing: 1 }}>Proyek Tersimpan</span>
+                                <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.1)', color: '#78716c', padding: '1px 6px', borderRadius: 20 }}>{projects.length}</span>
                             </div>
-                            <button onClick={() => { setFile(null); setFileError(''); }} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', padding: '6px', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                <XCircle size={14} />
-                            </button>
-                        </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {projects.map(p => {
+                                    const total = p.stats?.total || 1;
+                                    const approved = p.stats?.approved || 0;
+                                    const skipped = p.stats?.skipped || 0;
+                                    const pct = Math.round(((approved + skipped) / total) * 100);
+                                    const timeAgo = p.created_at ? getTimeAgo(new Date(p.created_at)) : '';
+                                    return (
+                                        <div
+                                            key={p.id}
+                                            onClick={() => navigate(`/editor/${p.id}`)}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: 10,
+                                                padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
+                                                border: '1px solid transparent', transition: 'all 0.12s',
+                                            }}
+                                            onMouseEnter={e => { e.currentTarget.style.background = '#111113'; e.currentTarget.style.borderColor = '#1e1e22'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
+                                        >
+                                            {/* Mini progress ring */}
+                                            <div style={{ position: 'relative', flexShrink: 0, width: 30, height: 30 }}>
+                                                <svg width="30" height="30" viewBox="0 0 30 30" style={{ transform: 'rotate(-90deg)' }}>
+                                                    <circle cx="15" cy="15" r="11" fill="none" stroke="#27272a" strokeWidth="2" />
+                                                    <circle cx="15" cy="15" r="11" fill="none"
+                                                        stroke={pct >= 100 ? '#10b981' : '#f59e0b'}
+                                                        strokeWidth="2"
+                                                        strokeDasharray={`${2 * Math.PI * 11}`}
+                                                        strokeDashoffset={`${2 * Math.PI * 11 * (1 - pct / 100)}`}
+                                                        strokeLinecap="round"
+                                                    />
+                                                </svg>
+                                                <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, color: pct >= 100 ? '#10b981' : '#71717a' }}>
+                                                    {pct}%
+                                                </span>
+                                            </div>
+                                            {/* Info */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 12, fontWeight: 600, color: '#d4d4d8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
+                                                    {p.title || 'Untitled'}
+                                                </div>
+                                                <div style={{ fontSize: 10, color: '#3f3f46', display: 'flex', gap: 5, alignItems: 'center' }}>
+                                                    <span style={{ color: '#52525b' }}>{p.lang_from?.toUpperCase()} → {p.lang_to?.toUpperCase()}</span>
+                                                    <span>·</span>
+                                                    <span>{timeAgo}</span>
+                                                </div>
+                                            </div>
+                                            {/* Delete */}
+                                            <button
+                                                onClick={e => handleDeleteProject(e, p.id)}
+                                                style={{ display: 'none', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, background: 'transparent', border: 'none', color: '#3f3f46', borderRadius: 4, cursor: 'pointer', flexShrink: 0 }}
+                                                className="proj-del-btn"
+                                                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = '#3f3f46'; }}
+                                            >
+                                                <Trash2 size={11} />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </>
                     )}
+                </div>
 
-                    <div style={{ marginTop: 16, textAlign: 'center', height: 20 }}>
-                        <p style={{ margin: 0, fontSize: 11, color: '#555', fontStyle: 'italic', transition: 'opacity 0.3s' }}>
-                            💡 Tip: {TIPS[tipIdx]}
-                        </p>
-                    </div>
+                {/* Footer: tip */}
+                <div className="upload-left-footer">
+                    <p style={{ margin: 0, fontSize: 10, color: '#3f3f46', fontStyle: 'italic', display: 'flex', alignItems: 'flex-start', gap: 5, lineHeight: 1.5 }}>
+                        <Lightbulb size={11} color="#52525b" style={{ flexShrink: 0, marginTop: 1 }} />
+                        {TIPS[tipIdx]}
+                    </p>
                 </div>
             </div>
 
-            {/* ── RIGHT PANEL ── */}
+            {/* ── RIGHT PANEL: always shows form ── */}
             <div className="upload-right">
                 <form className="upload-form" onSubmit={handleSubmit}>
 
-                    {/* Context Grid */}
+                    {/* File Drop Zone */}
                     <div>
-                        <label className="upload-label">Konteks Film</label>
+                        <label className="upload-label">File SRT</label>
+                        {!file ? (
+                            <div
+                                className={`drop-zone ${dragOver ? 'active' : ''} ${fileError ? 'error' : ''}`}
+                                style={{ minHeight: 120, padding: '20px 24px', flexDirection: 'row', gap: 16 }}
+                                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                                onDragLeave={() => setDragOver(false)}
+                                onDrop={handleDrop}
+                                onClick={() => fileRef.current?.click()}
+                            >
+                                <input ref={fileRef} type="file" accept=".srt" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
+                                <UploadCloud size={24} color={fileError ? '#ef4444' : '#52525b'} style={{ flexShrink: 0 }} />
+                                <div>
+                                    <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#d4d4d8' }}>Drag &amp; Drop file .srt ke sini</p>
+                                    <p style={{ margin: 0, fontSize: 11, color: '#52525b' }}>atau <span style={{ color: '#f59e0b', cursor: 'pointer' }}>klik untuk pilih file</span></p>
+                                    {fileError && <p style={{ color: '#ef4444', fontSize: 11, margin: '6px 0 0' }}>{fileError}</p>}
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ background: '#0c0c0e', border: '1px solid #27272a', borderRadius: 8, display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 10 }}>
+                                <FileText size={16} color="#10b981" style={{ flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <p style={{ margin: 0, fontSize: 13, color: '#e4e4e7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</p>
+                                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#52525b' }}>{(file.size / 1024).toFixed(1)} KB &middot; ~{lineCount} baris</p>
+                                </div>
+                                <button type="button" onClick={() => { setFile(null); setFileError(''); }} style={{ background: 'transparent', border: '1px solid #27272a', padding: '4px', borderRadius: 4, color: '#52525b', cursor: 'pointer', display: 'flex' }}>
+                                    <XCircle size={14} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Context Grid */}
+                    <div className="upload-card">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                            <Settings2 size={20} color="#f59e0b" />
+                            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: 1 }}>Konteks Film</h2>
+                        </div>
                         <div className="upload-grid3">
-                            <input className="upload-input" placeholder="Judul (Mis. Breaking Bad S2E1)" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
-                            <input className="upload-input" placeholder="Genre (Crime, Drama)" value={form.genre} onChange={e => setForm(f => ({ ...f, genre: e.target.value }))} />
-                            <input className="upload-input" placeholder="Karakter Utama (Walter, Jesse)" value={form.char_context} onChange={e => setForm(f => ({ ...f, char_context: e.target.value }))} />
+                            <div className="title-span pl-1">
+                                <label className="upload-label">Judul Film / Series</label>
+                                <input className="upload-input" placeholder="Mis. Breaking Bad" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+                            </div>
+                            <div>
+                                <label className="upload-label">Genre</label>
+                                <input className="upload-input" placeholder="Crime, Drama" value={form.genre} onChange={e => setForm(f => ({ ...f, genre: e.target.value }))} />
+                            </div>
+                            <div>
+                                <label className="upload-label">Karakter Utama</label>
+                                <input className="upload-input" placeholder="Walter, Jesse" value={form.char_context} onChange={e => setForm(f => ({ ...f, char_context: e.target.value }))} />
+                            </div>
                         </div>
                     </div>
 
                     {/* Language Selector */}
-                    <div>
-                        <label className="upload-label">Bahasa Asal & Tujuan</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-1)', padding: 8, borderRadius: 6, border: '1px solid var(--border)' }}>
-                            <select className="upload-input" style={{ border: 'none', background: 'var(--bg-2)' }} value={form.lang_from} onChange={e => setForm(f => ({ ...f, lang_from: e.target.value }))}>
-                                {LANG_FROM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-                            <ArrowRight size={14} color="var(--text-muted)" />
-                            <select className="upload-input" style={{ border: 'none', background: 'var(--bg-2)' }} value={form.lang_to} onChange={e => setForm(f => ({ ...f, lang_to: e.target.value }))}>
-                                {LANG_TO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
+                    <div className="upload-card">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                            <Globe size={20} color="#f59e0b" />
+                            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: 1 }}>Terjemahan</h2>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+                            <div style={{ flex: 1, position: 'relative' }}>
+                                <select className="upload-input" style={{ appearance: 'none', cursor: 'pointer' }} value={form.lang_from} onChange={e => setForm(f => ({ ...f, lang_from: e.target.value }))}>
+                                    {LANG_FROM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                                <div style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                                    <ChevronRight size={16} color="#71717a" style={{ transform: 'rotate(90deg)' }} />
+                                </div>
+                            </div>
+
+                            <div style={{ background: '#09090b', padding: 8, borderRadius: 8, border: '1px solid #27272a', color: '#52525b' }}>
+                                <ChevronRight size={16} />
+                            </div>
+
+                            <div style={{ flex: 1, position: 'relative' }}>
+                                <select className="upload-input" style={{ appearance: 'none', cursor: 'pointer' }} value={form.lang_to} onChange={e => setForm(f => ({ ...f, lang_to: e.target.value }))}>
+                                    {LANG_TO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                                <div style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                                    <ChevronRight size={16} color="#71717a" style={{ transform: 'rotate(90deg)' }} />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     {/* Engine Selector */}
-                    <div>
-                        <label className="upload-label">Engine Terjemahan</label>
+                    <div className="upload-card">
+                        <label className="upload-label" style={{ marginBottom: 8, fontSize: 13, textTransform: 'none', color: '#71717a' }}>Engine Terjemahan</label>
                         <div className="engine-tabs">
                             {ENGINES.map(eng => (
                                 <button
@@ -365,105 +571,148 @@ export default function UploadPage() {
                                     className={`engine-tab ${engine === eng.value ? 'active' : 'inactive'}`}
                                     onClick={() => setEngine(eng.value)}
                                 >
-                                    {eng.icon} {eng.label}
+                                    {eng.icon} <span>{eng.label}</span>
                                 </button>
                             ))}
                         </div>
 
                         {/* Sub-options for Gemini */}
                         {engine === 'gemini' && (
-                            <div style={{ marginTop: 8, background: 'rgba(245,158,11,0.05)', padding: '10px 12px', borderLeft: '2px solid var(--amber)', borderRadius: '0 4px 4px 0' }}>
+                            <div style={{ marginTop: 12, background: 'rgba(245,158,11,0.05)', padding: '16px', borderLeft: '2px solid #f59e0b', borderRadius: '0 12px 12px 0' }}>
                                 <input
                                     className="upload-input" type="password" placeholder="Gemini API Key (AIza...)"
                                     value={geminiKey} onChange={e => setGeminiKey(e.target.value)}
-                                    style={{ height: 32, borderColor: !geminiKey.trim() ? 'var(--red)' : 'var(--border)' }}
+                                    style={{ borderColor: !geminiKey.trim() ? '#ef4444' : '#27272a' }}
                                 />
-                                {!geminiKey.trim() && <p style={{ fontSize: 10, color: 'var(--red)', margin: '4px 0 0' }}>API key wajib diisi untuk engine Gemini.</p>}
+                                {!geminiKey.trim() && <p style={{ fontSize: 11, color: '#ef4444', margin: '8px 0 0', fontWeight: 500 }}>API key wajib diisi untuk engine Gemini.</p>}
                             </div>
                         )}
 
                         {/* Sub-options for LibreTranslate */}
                         {engine === 'libretranslate' && (
-                            <div style={{ marginTop: 8, background: 'rgba(139,92,246,0.05)', padding: '10px 12px', borderLeft: '2px solid #8b5cf6', borderRadius: '0 4px 4px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <div style={{ marginTop: 12, background: 'rgba(139,92,246,0.05)', padding: '16px', borderLeft: '2px solid #8b5cf6', borderRadius: '0 12px 12px 0', display: 'flex', gap: 12, alignItems: 'center' }}>
                                 <input
                                     className="upload-input" placeholder="URL (http://localhost:5000)"
                                     value={libreUrl} onChange={e => { setLibreUrl(e.target.value); setLibreStatus('idle'); }}
-                                    style={{ height: 32, flex: 1 }}
                                 />
-                                <button type="button" onClick={testLibre} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', color: 'var(--text)', padding: '0 12px', borderRadius: 4, height: 32, fontSize: 11, cursor: 'pointer' }}>
-                                    {libreStatus === 'testing' ? '...' : 'Test'}
+                                <button type="button" onClick={testLibre} style={{ background: '#27272a', border: '1px solid #3f3f46', color: '#e4e4e7', padding: '0 16px', borderRadius: '8px', height: 44, fontSize: 13, fontWeight: 500, cursor: 'pointer', flexShrink: 0 }}>
+                                    {libreStatus === 'testing' ? '...' : 'Test URL'}
                                 </button>
-                                {libreStatus === 'ok' && <Circle size={10} fill="var(--green)" color="var(--green)" />}
-                                {libreStatus === 'fail' && <Circle size={10} fill="var(--red)" color="var(--red)" />}
+                                {libreStatus === 'ok' && <CheckCircle2 size={16} color="#10b981" style={{ flexShrink: 0 }} />}
+                                {libreStatus === 'fail' && <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0 }} />}
                             </div>
                         )}
                     </div>
 
-                    {/* Auto-Skip Configuration */}
-                    <div>
-                        <label className="upload-label">Auto-Skip (Hemat API / Waktu)</label>
-                        <div style={{ display: 'flex', gap: 20, background: 'var(--bg-1)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
-                                <input type="checkbox" checked={skipLyrics} onChange={e => setSkipLyrics(e.target.checked)} style={{ accentColor: 'var(--amber)', width: 14, height: 14 }} />
-                                Skip baris nyanyian (♪)
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
-                                <input type="checkbox" checked={skipSfx} onChange={e => setSkipSfx(e.target.checked)} style={{ accentColor: 'var(--amber)', width: 14, height: 14 }} />
-                                Skip Sound Effects ([Music])
-                            </label>
-                        </div>
-                    </div>
+                    {/* Section 3: Auto-Skip & Submit Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(250px, 1fr) 1fr', gap: 16 }}>
 
-                    {/* Spacer to push submit button down */}
-                    <div style={{ flex: 1 }} />
+                        {/* Auto-Skip Preferences */}
+                        <div className="upload-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: 'rgba(245, 158, 11, 0.8)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16, display: 'block' }}>
+                                Auto-Skip (Hemat API/Waktu)
+                            </label>
 
-                    {/* Error Box */}
-                    {phase === 'error' && (
-                        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', padding: '10px 14px', borderRadius: 6, color: 'var(--red)', fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <AlertTriangle size={14} /> {submitError}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', group: 'true' }}>
+                                    <div className={`checkbox-box ${skipLyrics ? 'checked' : ''}`}>
+                                        <svg style={{ width: 14, height: 14, opacity: skipLyrics ? 1 : 0, transition: 'opacity 0.2s' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    </div>
+                                    <input type="checkbox" style={{ display: 'none' }} checked={skipLyrics} onChange={e => setSkipLyrics(e.target.checked)} />
+                                    <span style={{ fontSize: 14, color: skipLyrics ? '#fff' : '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, transition: 'color 0.2s' }}>
+                                        <Music size={16} color="#71717a" />
+                                        Skip baris nyanyian (♪)
+                                    </span>
+                                </label>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', group: 'true' }}>
+                                    <div className={`checkbox-box ${skipSfx ? 'checked' : ''}`}>
+                                        <svg style={{ width: 14, height: 14, opacity: skipSfx ? 1 : 0, transition: 'opacity 0.2s' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    </div>
+                                    <input type="checkbox" style={{ display: 'none' }} checked={skipSfx} onChange={e => setSkipSfx(e.target.checked)} />
+                                    <span style={{ fontSize: 14, color: skipSfx ? '#fff' : '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, transition: 'color 0.2s' }}>
+                                        <VolumeX size={16} color="#71717a" />
+                                        Skip Sound Effects ([Music])
+                                    </span>
+                                </label>
                             </div>
-                            <button type="button" onClick={() => { setPhase('idle'); setSubmitError(''); }} style={{ background: 'var(--red)', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer' }}>
-                                Retry
+                        </div>
+
+                        {/* Error Box */}
+                        {phase === 'error' && (
+                            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', padding: '10px 14px', borderRadius: 6, color: 'var(--red)', fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: 'span 2' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <AlertTriangle size={14} /> {submitError}
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button type="button" onClick={() => { setPhase('idle'); setSubmitError(''); }} style={{ background: 'transparent', color: '#fca5a5', border: '1px solid currentColor', padding: '4px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer' }}>
+                                        Batal/Ubah
+                                    </button>
+                                    <button type="button" onClick={projectId ? handleResume : () => { setPhase('idle'); setSubmitError(''); }} style={{ background: 'var(--red)', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer' }}>
+                                        {projectId ? 'Resume' : 'Tutup'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Submit Button Area */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                            <button
+                                type={phase === 'idle' ? 'submit' : 'button'}
+                                disabled={isSubmitDisabled}
+                                className="btn-submit"
+                                style={{
+                                    height: '100%',
+                                    background: phase === 'translating' ? '#27272a' : (isManual ? '#3f3f46' : '#f59e0b'),
+                                    color: phase === 'translating' ? '#f59e0b' : (isManual ? '#fff' : '#09090b'),
+                                    opacity: isSubmitDisabled ? 0.5 : 1,
+                                    cursor: isSubmitDisabled ? 'not-allowed' : phase === 'translating' ? 'wait' : 'pointer',
+                                    padding: '24px 32px'
+                                }}
+                            >
+                                {phase === 'translating' && (
+                                    <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${pct}%`, background: 'rgba(245, 158, 11, 0.15)', transition: 'width 0.4s ease' }} />
+                                )}
+
+                                {phase === 'translating' ? (
+                                    <>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 18, zIndex: 1 }}>
+                                            <Loader2 size={24} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> Mentranslate...
+                                        </span>
+                                        <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(245, 158, 11, 0.6)', zIndex: 1 }}>{progress.processed} / {progress.total} baris ({pct}%)</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, zIndex: 1 }}>
+                                            {isManual ? 'Buka Editor' : 'Mulai Translate'}
+                                            <ChevronRight size={20} />
+                                        </span>
+                                        <span style={{ fontSize: 12, fontWeight: 500, color: isManual ? 'rgba(255,255,255,0.4)' : 'rgba(120, 53, 15, 0.6)', zIndex: 1 }}>
+                                            {isManual ? 'Mode Manual' : 'Mulai Workflow'}
+                                        </span>
+                                    </>
+                                )}
                             </button>
                         </div>
-                    )}
+                    </div> {/* End of Auto-Skip & Submit Grid */}
 
-                    {/* Submit Button Area */}
-                    <button
-                        type={phase === 'idle' ? 'submit' : 'button'}
-                        disabled={isSubmitDisabled}
-                        className="btn-submit"
-                        style={{
-                            background: phase === 'translating' ? 'var(--bg-2)' : (isManual ? '#4b5563' : 'var(--amber)'),
-                            color: phase === 'translating' ? 'var(--amber)' : (isManual ? '#fff' : '#000'),
-                            opacity: isSubmitDisabled ? 0.5 : 1,
-                            cursor: isSubmitDisabled ? 'not-allowed' : phase === 'translating' ? 'wait' : 'pointer'
-                        }}
-                    >
-                        {phase === 'translating' && (
-                            <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${pct}%`, background: 'rgba(245, 158, 11, 0.15)', transition: 'width 0.4s ease' }} />
-                        )}
-
-                        {phase === 'translating' ? (
-                            <><Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> Mentranslate... {progress.processed} / {progress.total} baris ({pct}%)</>
-                        ) : isManual ? (
-                            <><Edit3 size={16} /> Buka Editor →</>
-                        ) : (
-                            <><Sparkles size={16} /> Mulai Translate →</>
-                        )}
-                    </button>
                     {phase === 'translating' && progress.logs.length > 0 && (
-                        <div style={{ textAlign: 'center', fontSize: 10, color: 'var(--text-muted)', marginTop: -6 }}>
+                        <div style={{ textAlign: 'center', fontSize: 10, color: '#a1a1aa', marginTop: -6 }}>
                             {progress.logs[progress.logs.length - 1]}
                         </div>
                     )}
+
                 </form>
             </div>
-            {/* Inline CSS Keyframes */}
-            <style>{`
-                @keyframes spin { 100% { transform: rotate(360deg); } }
-            `}</style>
+
         </div>
     );
+}
+
+function getTimeAgo(date) {
+    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diff < 60) return 'baru saja';
+    if (diff < 3600) return `${Math.floor(diff / 60)} mnt lalu`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
+    return `${Math.floor(diff / 86400)} hari lalu`;
 }

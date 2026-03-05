@@ -81,3 +81,9 @@ textarea:focus {
   background: #2a2a32;
   border-radius: 2px;
 }
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

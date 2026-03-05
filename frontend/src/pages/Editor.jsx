@@ -4,9 +4,12 @@ import { useShallow } from 'zustand/react/shallow';
 import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
-import { Hexagon, HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp } from 'lucide-react';
+import { Hexagon, HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp, Trash2, CheckSquare, XSquare, Wand2 } from 'lucide-react';
 import SubSourceModal from '../components/SubSourceModal';
 import FindReplaceModal from '../components/FindReplaceModal';
+import WaveSurfer from 'wavesurfer.js';
+import { Menu, Item, Separator } from 'react-contexify';
+import 'react-contexify/dist/ReactContexify.css';
 
 const API = 'http://localhost:8000';
 
@@ -44,6 +47,8 @@ export default function EditorPage() {
         activeSegId, setActiveSegId,
         sidePanel, setSidePanel,
         loadProject, getStats,
+        selectedSegIds, approveSelected, clearSelectedTranslation, skipSelected, clearSelection,
+        isSaving, lastSaved,
     } = useSubtiStore(useShallow(state => ({
         currentProject: state.currentProject,
         segments: state.segments,
@@ -56,6 +61,13 @@ export default function EditorPage() {
         setSidePanel: state.setSidePanel,
         loadProject: state.loadProject,
         getStats: state.getStats,
+        selectedSegIds: state.selectedSegIds,
+        approveSelected: state.approveSelected,
+        clearSelectedTranslation: state.clearSelectedTranslation,
+        skipSelected: state.skipSelected,
+        clearSelection: state.clearSelection,
+        isSaving: state.isSaving,
+        lastSaved: state.lastSaved,
     })));
 
     const [showSubSource, setShowSubSource] = useState(false);
@@ -65,6 +77,23 @@ export default function EditorPage() {
     // Viewfinder Native Playback
     const [videoSrc, setVideoSrc] = useState(null);
     const videoRef = useRef(null);
+    const waveformRef = useRef(null);
+    const wavesurferRef = useRef(null);
+
+    useEffect(() => {
+        if (videoSrc && waveformRef.current) {
+            wavesurferRef.current = WaveSurfer.create({
+                container: waveformRef.current,
+                waveColor: 'rgba(245,158,11,0.3)',
+                progressColor: 'var(--amber)',
+                height: 40,
+                barWidth: 2,
+                normalize: true,
+                media: videoRef.current
+            });
+            return () => wavesurferRef.current.destroy();
+        }
+    }, [videoSrc]);
 
     const [showBackToTop, setShowBackToTop] = useState(false);
     const mainRef = useRef(null);
@@ -231,6 +260,44 @@ export default function EditorPage() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [activeSegId, filtered, activeIndex]);
 
+    const handleContextItemClick = async ({ id: actionId, props }) => {
+        const { textSelection, range, seg, editValueSnapshot } = props;
+        if (!textSelection || !range || editValueSnapshot === null) {
+            // If no selection or not in editing mode at time of right-click
+            alert('Pilih teks dulu di dalam kolom terjemahan saat sedang dalam mode edit (double-click baris terlebih dahulu).');
+            return;
+        }
+
+        if (actionId === 'translate') {
+            const res = await useSubtiStore.getState().translateSnippet(textSelection);
+            if (res.success && res.translation) {
+                // Use the snapshot taken at right-click time, not stale editValue
+                const newText =
+                    editValueSnapshot.substring(0, range.start) +
+                    res.translation +
+                    editValueSnapshot.substring(range.end);
+                // Patch directly to API and re-open editing with new text
+                await useSubtiStore.getState().saveEditWithValue(seg.id, newText);
+                // Re-open editing so user can continue
+                const updatedSeg = useSubtiStore.getState().segments.find(s => s.id === seg.id);
+                if (updatedSeg) {
+                    useSubtiStore.getState().startEdit({ ...updatedSeg, translation: newText });
+                }
+            } else {
+                alert('Gagal: ' + (res.error || 'Terjadi kesalahan tidak dikenal.'));
+            }
+        } else if (actionId === 'clear') {
+            const newText =
+                editValueSnapshot.substring(0, range.start) +
+                editValueSnapshot.substring(range.end);
+            await useSubtiStore.getState().saveEditWithValue(seg.id, newText);
+            const updatedSeg = useSubtiStore.getState().segments.find(s => s.id === seg.id);
+            if (updatedSeg) {
+                useSubtiStore.getState().startEdit({ ...updatedSeg, translation: newText });
+            }
+        }
+    };
+
     const timecodeToSeconds = (tc) => {
         if (!tc) return 0;
         const [hms, ms] = tc.replace(',', '.').split(/[.,]/);
@@ -324,6 +391,30 @@ export default function EditorPage() {
                     <span style={{ fontSize: 11, background: 'var(--amber-dim)', color: 'var(--amber)', padding: '2px 8px', borderRadius: 3, border: '1px solid var(--amber-border)' }}>
                         {currentProject.lang_from?.toUpperCase()} → {currentProject.lang_to?.toUpperCase()}
                     </span>
+                    {/* Auto-save indicator */}
+                    <span style={{
+                        fontSize: 11, display: 'flex', alignItems: 'center', gap: 5,
+                        color: isSaving ? 'var(--amber)' : lastSaved ? '#10b981' : 'transparent',
+                        transition: 'color 0.4s',
+                    }}>
+                        {isSaving ? (
+                            <>
+                                <span style={{
+                                    display: 'inline-block', width: 8, height: 8,
+                                    border: '1.5px solid var(--amber)', borderTopColor: 'transparent',
+                                    borderRadius: '50%', animation: 'spin 0.7s linear infinite',
+                                }} />
+                                Menyimpan...
+                            </>
+                        ) : lastSaved ? (
+                            <>
+                                <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                                    <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                Tersimpan
+                            </>
+                        ) : null}
+                    </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     {/* Progress */}
@@ -397,19 +488,23 @@ export default function EditorPage() {
                         )}
 
                         {videoSrc && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <button onClick={togglePlay} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
-                                    {isPlaying ? '⏸' : '▶'}
-                                </button>
-                                <div title="Seek Video" onClick={e => {
-                                    if (!videoRef.current) return;
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const pct = (e.clientX - rect.left) / rect.width;
-                                    videoRef.current.currentTime = pct * videoRef.current.duration;
-                                }} style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
-                                    <div style={{ height: '100%', background: 'var(--amber)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <button onClick={togglePlay} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
+                                        {isPlaying ? '⏸' : '▶'}
+                                    </button>
+                                    <div title="Seek Video" onClick={e => {
+                                        if (!videoRef.current) return;
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        const pct = (e.clientX - rect.left) / rect.width;
+                                        videoRef.current.currentTime = pct * videoRef.current.duration;
+                                    }} style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+                                        <div style={{ height: '100%', background: 'var(--amber)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
+                                    </div>
+                                    <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
                                 </div>
-                                <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
+                                {/* Waveform Container */}
+                                <div ref={waveformRef} style={{ width: '100%', overflow: 'hidden', borderRadius: 4, background: '#111' }} />
                             </div>
                         )}
                     </div>
@@ -580,7 +675,65 @@ export default function EditorPage() {
                 </button>
             )}
 
+            {/* FLOATING BULK ACTIONS TOOLBAR */}
+            {selectedSegIds.size > 0 && (
+                <div style={{
+                    position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)',
+                    background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 8,
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.8)', padding: '12px 24px',
+                    display: 'flex', alignItems: 'center', gap: 24, zIndex: 1000,
+                    color: '#fff'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, background: 'var(--blue-dim)', color: 'var(--blue)', padding: '2px 8px', borderRadius: 4 }}>
+                            {selectedSegIds.size} Baris Terpilih
+                        </span>
+                        <button onClick={clearSelection} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+                            Batal
+                        </button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button onClick={approveSelected} style={{ background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid currentColor', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            <CheckSquare size={14} /> Approve Semua
+                        </button>
+                        <button onClick={skipSelected} style={{ background: 'var(--bg-2)', color: 'var(--text)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            <XSquare size={14} /> Skip Semua
+                        </button>
+                        <button onClick={clearSelectedTranslation} style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)', border: '1px solid currentColor', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            <Trash2 size={14} /> Kosongkan Teks
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {showFindReplace && <FindReplaceModal onClose={() => setShowFindReplace(false)} />}
+
+            {/* CONTEXT MENU */}
+            <Menu id="seg-menu" theme="dark" style={{
+                fontSize: 13,
+                '--contexify-menu-bgColor': '#1a1a1c',
+                '--contexify-separator-color': '#2a2a2e',
+                '--contexify-item-color': '#c0c0cc',
+                '--contexify-activeItem-bgColor': '#28282c',
+                '--contexify-activeItem-color': '#fff',
+                border: '1px solid #2a2a2e',
+                borderRadius: 8,
+                boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+            }}>
+                <Item id="translate" onClick={handleContextItemClick}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--amber)', fontWeight: 600 }}>
+                        <Wand2 size={14} />
+                        Translate Teks Ini
+                    </div>
+                </Item>
+                <Separator />
+                <Item id="clear" onClick={handleContextItemClick}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--red)' }}>
+                        <Trash2 size={14} />
+                        Hapus Teks
+                    </div>
+                </Item>
+            </Menu>
         </div>
     );
 }

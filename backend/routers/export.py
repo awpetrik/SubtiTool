@@ -25,6 +25,7 @@ def export_srt(project_id: int, db: Session = Depends(get_db)):
             "timecode_end": s.timecode_end,
             "original": s.original,
             "translation": s.translation,
+            "status": s.status,
         }
         for s in segments
     ]
@@ -33,7 +34,7 @@ def export_srt(project_id: int, db: Session = Depends(get_db)):
     return PlainTextResponse(
         content=srt_content,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        media_type="application/x-subrip",
+        media_type="application/x-subrip; charset=utf-8",
     )
 
 

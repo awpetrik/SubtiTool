@@ -74,7 +74,21 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
 
 @router.get("")
 def list_projects(db: Session = Depends(get_db)):
-    return [_project_dict(p) for p in db.query(Project).order_by(Project.created_at.desc()).all()]
+    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    result = []
+    for p in projects:
+        segs = db.query(Segment).filter(Segment.project_id == p.id).all()
+        total = len(segs)
+        approved = sum(1 for s in segs if s.status == 'approved')
+        skipped = sum(1 for s in segs if s.status == 'skipped')
+        pending = sum(1 for s in segs if s.status == 'pending')
+        d = _project_dict(p)
+        d['stats'] = {
+            'total': total, 'approved': approved,
+            'skipped': skipped, 'pending': pending,
+        }
+        result.append(d)
+    return result
 
 
 @router.patch("/{project_id}/segments/{seg_id}")

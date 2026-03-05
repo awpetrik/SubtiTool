@@ -1,7 +1,8 @@
-import { memo } from 'react';
-import { Flag, Check, Edit2, Eye } from 'lucide-react';
+import { memo, useRef, useState } from 'react';
+import { Flag, Check, Edit2, Eye, Wand2, Trash2 } from 'lucide-react';
 import useSubtiStore, { timecodeToSeconds } from '../store/useSubtiStore';
 import FlagModal from './FlagModal';
+import { useContextMenu } from 'react-contexify';
 
 const STATUS_CFG = {
     pending: { label: 'Pending', color: '#64748b', bg: 'rgba(100,116,139,0.12)' },
@@ -46,6 +47,26 @@ export default memo(function SubtitleRow({ seg }) {
 
     const cfg = STATUS_CFG[seg.status] || STATUS_CFG.pending;
     const isSkipped = seg.status === 'skipped';
+    const [translatingLine, setTranslatingLine] = useState(false);
+
+    const handleQuickTranslate = async (e) => {
+        e.stopPropagation();
+        if (translatingLine) return;
+        setTranslatingLine(true);
+        try {
+            const res = await useSubtiStore.getState().translateSnippet(seg.original);
+            if (res.success && res.translation) {
+                await useSubtiStore.getState().saveEditWithValue(seg.id, res.translation);
+                // Re-open for review
+                const updatedSeg = useSubtiStore.getState().segments.find(s => s.id === seg.id);
+                if (updatedSeg) useSubtiStore.getState().startEdit({ ...updatedSeg, translation: res.translation });
+            } else {
+                alert('Gagal translate baris: ' + (res.error || 'Unknown error'));
+            }
+        } finally {
+            setTranslatingLine(false);
+        }
+    };
 
     // QC Metrics
     const duration = timecodeToSeconds(seg.timecode_end) - timecodeToSeconds(seg.timecode_start);
@@ -56,23 +77,94 @@ export default memo(function SubtitleRow({ seg }) {
     const cps = duration > 0 ? (textLen / duration) : 0;
     const isCpsDanger = cps > 17;
     const isLenDanger = origLen > 0 && (textLen / origLen) > 1.5;
+    const isWarning = (isCpsDanger || isLenDanger) && !isSkipped;
+
+    const { show } = useContextMenu({ id: 'seg-menu' });
+
+    // Store selection here so right-click doesn't lose it
+    const selectionRef = useRef({ text: '', range: null });
+
+    const captureSelection = (ta) => {
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        if (start !== end) {
+            selectionRef.current = {
+                text: ta.value.substring(start, end),
+                range: { start, end },
+            };
+        } else {
+            selectionRef.current = { text: '', range: null };
+        }
+    };
+
+    const handleContextMenu = (e) => {
+        e.preventDefault();
+        // Re-read selection from textarea directly if still available
+        if (isEditing && e.target.tagName === 'TEXTAREA') {
+            captureSelection(e.target);
+        }
+        // Snapshot editValue NOW before blur/saveEdit can clear it
+        const editValueSnapshot = isEditing ? useSubtiStore.getState().editValue : null;
+        show({
+            event: e,
+            props: {
+                seg,
+                textSelection: selectionRef.current.text,
+                range: selectionRef.current.range,
+                editValueSnapshot,
+            }
+        });
+    };
 
     return (
         <>
             <div
                 id={`seg-${seg.id}`}
                 onClick={() => setActiveSegId(seg.id)}
+                onContextMenu={handleContextMenu}
+                onMouseDown={(e) => {
+                    // Prevent blur on right-click so selection stays in textarea
+                    if (e.button === 2) e.preventDefault();
+                }}
                 style={{
                     display: 'flex', alignItems: 'flex-start', gap: 12,
                     padding: '10px 16px', borderBottom: '1px solid #141416',
-                    cursor: 'pointer', transition: 'background 0.1s',
-                    background: isSelected ? 'var(--blue-dim)' : isActive ? 'rgba(245,158,11,0.05)' : isLenDanger && !isSkipped ? 'rgba(239,68,68,0.02)' : 'transparent',
-                    borderLeft: isActive ? '2px solid var(--amber)' : isSelected ? '2px solid var(--blue)' : isLenDanger && !isSkipped ? '2px solid rgba(239,68,68,0.5)' : '2px solid transparent',
-                    opacity: isSkipped ? 0.45 : 1,
+                    cursor: 'pointer', transition: 'background 0.15s, opacity 0.15s',
+                    background: isSelected
+                        ? 'var(--blue-dim)'
+                        : isActive
+                            ? 'rgba(245,158,11,0.05)'
+                            : isWarning
+                                ? 'rgba(239,68,68,0.02)'
+                                : 'transparent',
+                    borderLeft: isActive
+                        ? '2px solid var(--amber)'
+                        : isSelected
+                            ? '2px solid var(--blue)'
+                            : isWarning
+                                ? '2px solid rgba(239,68,68,0.5)'
+                                : seg.status === 'approved'
+                                    ? '2px solid rgba(16,185,129,0.5)'
+                                    : seg.status === 'flagged'
+                                        ? '2px solid rgba(239,68,68,0.4)'
+                                        : seg.status === 'in_review'
+                                            ? '2px solid rgba(139,92,246,0.4)'
+                                            : seg.status === 'ai_done'
+                                                ? '2px solid rgba(245,158,11,0.3)'
+                                                : '2px solid transparent',
+                    opacity: isSkipped ? 0.4 : seg.status === 'approved' ? 0.65 : 1,
                 }}
             >
-                {/* Index */}
-                <span style={{ width: 36, color: 'var(--text-muted)', paddingTop: 2, flexShrink: 0 }}>{seg.index}</span>
+                {/* Index & Multi-Select Checkbox */}
+                <span style={{ width: 50, color: 'var(--text-muted)', paddingTop: 2, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => { e.stopPropagation(); useSubtiStore.getState().toggleSelection(seg.id); }}
+                        style={{ accentColor: 'var(--blue)', width: 14, height: 14, cursor: 'pointer', appearance: 'auto' }}
+                    />
+                    {seg.index}
+                </span>
 
                 {/* Timecode & QC Metric */}
                 <div style={{ width: 160, display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 2, flexShrink: 0 }}>
@@ -107,9 +199,32 @@ export default memo(function SubtitleRow({ seg }) {
                             autoFocus
                             value={editValue}
                             onChange={e => useSubtiStore.setState({ editValue: e.target.value })}
+                            onMouseUp={e => captureSelection(e.target)}
+                            onSelect={e => captureSelection(e.target)}
                             onBlur={() => saveEdit(seg.id)}
+                            onContextMenu={e => {
+                                // Capture selection specifically on the textarea before the menu shows
+                                captureSelection(e.target);
+                            }}
                             onKeyDown={e => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
+                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                    // Smart Auto-Break (Piramida terbalik)
+                                    e.preventDefault();
+                                    const text = useSubtiStore.getState().editValue;
+                                    if (!text) return;
+                                    const center = Math.floor(text.length / 2);
+                                    const before = text.lastIndexOf(' ', center);
+                                    const after = text.indexOf(' ', center + 1);
+
+                                    let splitIndex = center;
+                                    if (before === -1 && after === -1) splitIndex = center;
+                                    else if (before === -1) splitIndex = after;
+                                    else if (after === -1) splitIndex = before;
+                                    else splitIndex = (center - before) < (after - center) ? before : after;
+
+                                    const newText = text.substring(0, splitIndex).trim() + '\n' + text.substring(splitIndex).trim();
+                                    useSubtiStore.setState({ editValue: newText });
+                                } else if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault();
                                     saveEdit(seg.id);
                                     const all = useSubtiStore.getState().segments;
@@ -156,8 +271,8 @@ export default memo(function SubtitleRow({ seg }) {
                                     dangerouslySetInnerHTML={{ __html: highlightGlossary(seg.translation, glossary).replace(/\n/g, '<br/>') }}
                                 />
                             ) : (
-                                <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.5, fontStyle: 'italic' }}>
-                                    — belum ditranslate —
+                                <p style={{ margin: 0, color: 'rgba(245,158,11,0.45)', lineHeight: 1.5, fontStyle: 'italic', fontSize: 12 }}>
+                                    ✦ belum ditranslate
                                 </p>
                             )}
                             {seg.flag_note && (
@@ -200,6 +315,26 @@ export default memo(function SubtitleRow({ seg }) {
 
                     <ActionBtn title="Edit" onClick={() => startEdit(seg)}><Edit2 size={14} /></ActionBtn>
 
+                    {/* Quick Translate: hanya tampil jika belum approved/skipped */}
+                    {seg.status !== 'skipped' && (
+                        <ActionBtn
+                            title={translatingLine ? 'Menerjemahkan...' : 'Terjemahkan baris ini (Google)'}
+                            onClick={handleQuickTranslate}
+                            color="var(--amber)"
+                            disabled={translatingLine}
+                        >
+                            {translatingLine ? (
+                                <span style={{
+                                    display: 'inline-block', width: 12, height: 12,
+                                    border: '2px solid var(--amber)', borderTopColor: 'transparent',
+                                    borderRadius: '50%', animation: 'spin 0.7s linear infinite',
+                                }} />
+                            ) : (
+                                <Wand2 size={14} />
+                            )}
+                        </ActionBtn>
+                    )}
+
                     {seg.status !== 'in_review' && seg.status !== 'skipped' ? (
                         <ActionBtn title="Tandai In Review" onClick={() => setInReview(seg.id)} color="#8b5cf6"><Eye size={14} /></ActionBtn>
                     ) : <div style={{ width: 26, height: 26 }} />}
@@ -215,17 +350,19 @@ export default memo(function SubtitleRow({ seg }) {
     );
 });
 
-function ActionBtn({ children, onClick, title, color }) {
+function ActionBtn({ children, onClick, title, color, disabled }) {
     return (
         <button
             title={title}
             onClick={onClick}
+            disabled={disabled}
             style={{
                 background: 'none', border: '1px solid var(--border)',
                 color: color || 'var(--text-muted)', width: 26, height: 26,
                 borderRadius: 3, fontSize: 13, display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.1s',
+                transition: 'all 0.15s', cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.5 : 1,
             }}
         >
             {children}

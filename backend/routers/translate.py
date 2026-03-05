@@ -75,6 +75,7 @@ async def start_translate(
     is_skip_sfx = skip_sfx == "true"
     
     pending_segs_for_job = []
+    segments_to_insert = []
 
     for seg in segments_data:
         text_clean = seg["original"].strip()
@@ -95,7 +96,7 @@ async def start_translate(
         status = "skipped" if is_skipped else "pending"
         translation = text_clean if is_skipped else ""
 
-        db.add(Segment(
+        segments_to_insert.append(Segment(
             project_id=project.id,
             index=seg["index"],
             timecode_start=seg["timecode_start"],
@@ -107,6 +108,8 @@ async def start_translate(
         
         if status == "pending":
             pending_segs_for_job.append(seg)
+            
+    db.bulk_save_objects(segments_to_insert)
             
     db.commit()
 
@@ -134,6 +137,47 @@ async def start_translate(
     )
 
     return {"job_id": job_id, "project_id": project.id, "total": len(segments_data)}
+
+
+@router.post("/{project_id}/resume")
+async def resume_translate(
+    project_id: int,
+    background_tasks: BackgroundTasks,
+    gemini_api_key: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project tidak ditemukan")
+
+    pending_segs = db.query(Segment).filter(Segment.project_id == project_id, Segment.status == "pending").order_by(Segment.index).all()
+    
+    if not pending_segs:
+        return {"job_id": None, "project_id": project.id, "total": 0}
+
+    pending_segs_for_job = [{"index": s.index, "original": s.original, "timecode_start": s.timecode_start, "timecode_end": s.timecode_end} for s in pending_segs]
+
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {
+        "project_id": project.id,
+        "status": "running",
+        "processed": 0,
+        "total": len(pending_segs_for_job),
+        "logs": [],
+    }
+
+    background_tasks.add_task(
+        _run_translate_job,
+        job_id=job_id,
+        project_id=project.id,
+        segments_data=pending_segs_for_job,
+        context={"title": project.title, "genre": project.genre, "char_context": project.char_context,
+                 "lang_from": project.lang_from, "lang_to": project.lang_to},
+        engine_name=project.engine,
+        gemini_key=gemini_api_key,
+    )
+
+    return {"job_id": job_id, "project_id": project.id, "total": len(pending_segs)}
 
 
 def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key):
@@ -168,12 +212,25 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
     glossary = [{"source_term": g.source_term, "target_term": g.target_term} for g in glossary_entries]
     lines = [seg["original"] for seg in segments_data]
 
+    import logging as _log
+    _logger = _log.getLogger(__name__)
     try:
         all_translated: list[str] = []
+        failed_batches = []
+
         for i in range(0, len(lines), BATCH_SIZE):
             context_start = max(0, i - OVERLAP)
             batch_lines = lines[context_start: i + BATCH_SIZE]
-            translated = await translate_engine.translate_batch(batch_lines, context, glossary)
+
+            try:
+                translated = await translate_engine.translate_batch(batch_lines, context, glossary)
+            except Exception as batch_err:
+                _logger.error(f"Batch {i // BATCH_SIZE + 1} gagal: {batch_err}")
+                failed_batches.append(i // BATCH_SIZE + 1)
+                # Fallback: isi dengan original text, jangan crash seluruh job
+                effective_batch = batch_lines[OVERLAP:] if i > 0 else batch_lines
+                translated = (batch_lines[:OVERLAP] if i > 0 else []) + effective_batch
+                job["logs"].append(f"⚠ Batch {i // BATCH_SIZE + 1} gagal, lanjut batch berikutnya")
 
             if i > 0:
                 translated = translated[OVERLAP:]
@@ -191,9 +248,11 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
 
             db.commit()
             job["processed"] = min(len(all_translated), len(lines))
-            job["logs"].append(f"Batch {i//BATCH_SIZE + 1}: {job['processed']}/{job['total']} baris selesai")
+            job["logs"].append(f"Batch {i // BATCH_SIZE + 1}: {job['processed']}/{job['total']} baris selesai")
 
-        job["status"] = "done"
+        job["status"] = "done_partial" if failed_batches else "done"
+        if failed_batches:
+            job["error"] = f"Batch gagal: {failed_batches} — sisa berhasil disimpan"
     except Exception as e:
         job["status"] = "error"
         job["error"] = str(e)
@@ -223,7 +282,7 @@ async def get_progress(job_id: str):
                 f"status={job.get('status', 'running')}\n\n"
             )
 
-            if job.get("status") in ("done", "error"):
+            if job.get("status") in ("done", "done_partial", "error"):
                 yield f"event: done\ndata: status={job['status']}&error={job.get('error', '')}\n\n"
                 break
 
@@ -265,3 +324,37 @@ async def retranslate_segment(
         return _segment_dict(seg)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class TranslateTextRequest(BaseModel):
+    text: str
+    gemini_api_key: Optional[str] = None
+
+@router.post("/{project_id}/text")
+async def translate_text_snippet(
+    project_id: int,
+    payload: TranslateTextRequest,
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project tidak ditemukan")
+
+    glossary_entries = db.query(Glossary).filter(Glossary.project_id == project_id).all()
+    glossary = [{"source_term": g.source_term, "target_term": g.target_term} for g in glossary_entries]
+
+    context = {
+        "title": project.title, "genre": project.genre,
+        "char_context": project.char_context,
+        "lang_from": project.lang_from, "lang_to": project.lang_to,
+    }
+
+    try:
+        # User requested to force Google Translate for contextual translation
+        engine = _get_engine("google_free", None)
+        result = await engine.translate_batch([payload.text], context, glossary)
+        return {"translation": result[0] if result else ""}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Gagal terhubung ke layanan terjemahan. Pastikan internet aktif!")

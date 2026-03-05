@@ -22,6 +22,22 @@ export const timecodeToSeconds = (tc) => {
 
 const API = 'http://localhost:8000';
 
+// Retry dengan exponential backoff — max 3 attempts, start 500ms
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  let delay = 500;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.ok || res.status < 500) return res; // 4xx tidak di-retry
+      throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      if (attempt === maxRetries - 1) throw err;
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+}
+
 const useSubtiStore = create((set, get) => ({
   // Project state
   currentProject: null,
@@ -37,6 +53,8 @@ const useSubtiStore = create((set, get) => ({
   editValue: '',
   sidePanel: 'glossary', // 'glossary' | 'stats'
   isTranslating: false,
+  isSaving: false,
+  lastSaved: null,
   jobProgress: { processed: 0, total: 0, logs: [], status: 'idle' },
 
   // Keyboard navigation state
@@ -141,32 +159,61 @@ const useSubtiStore = create((set, get) => ({
   cancelEdit: () => set({ editingId: null, editValue: '' }),
 
   saveEdit: async (segId) => {
-    const { currentProject, editValue, segments, prepareUndo } = get();
+    const { currentProject, editValue, prepareUndo } = get();
     prepareUndo(segId);
-    set({ editingId: null });
-    const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ translation: editValue, status: 'approved' }),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+    set({ editingId: null, isSaving: true });
+    try {
+      const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ translation: editValue, status: 'approved' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set({ segments: get().segments.map(s => s.id === segId ? updated : s), isSaving: false, lastSaved: new Date() });
+      } else {
+        set({ isSaving: false });
+      }
+    } catch {
+      set({ isSaving: false });
+    }
+  },
+
+  saveEditWithValue: async (segId, text) => {
+    const { currentProject, prepareUndo } = get();
+    prepareUndo(segId);
+    set({ editingId: null, isSaving: true });
+    try {
+      const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ translation: text, status: 'approved' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set({ segments: get().segments.map(s => s.id === segId ? updated : s), isSaving: false, lastSaved: new Date() });
+      } else {
+        set({ isSaving: false });
+      }
+    } catch {
+      set({ isSaving: false });
     }
   },
 
   approve: async (segId) => {
-    const { currentProject, segments, prepareUndo } = get();
+    const { currentProject, prepareUndo } = get();
     prepareUndo(segId);
-    const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'approved' }),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
-    }
+    try {
+      const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+      }
+    } catch { /* silent — no network */ }
   },
 
   approveSelected: async () => {
@@ -189,18 +236,56 @@ const useSubtiStore = create((set, get) => ({
     set({ selectedSegIds: new Set() });
   },
 
-  setInReview: async (segId) => {
-    const { currentProject, segments, prepareUndo } = get();
-    prepareUndo(segId);
-    const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'in_review' }),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+  clearSelectedTranslation: async () => {
+    const { selectedSegIds, segments, currentProject, prepareUndo } = get();
+    if (selectedSegIds.size === 0) return;
+    const ids = Array.from(selectedSegIds);
+    for (const id of ids) {
+      prepareUndo(id);
+      const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ translation: ' ', status: 'pending' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set(state => ({ segments: state.segments.map(s => s.id === id ? updated : s) }));
+      }
     }
+    set({ selectedSegIds: new Set() });
+  },
+
+  skipSelected: async () => {
+    const { selectedSegIds, segments, currentProject, prepareUndo } = get();
+    if (selectedSegIds.size === 0) return;
+    const ids = Array.from(selectedSegIds);
+    for (const id of ids) {
+      prepareUndo(id);
+      const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'skipped' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set(state => ({ segments: state.segments.map(s => s.id === id ? updated : s) }));
+      }
+    }
+    set({ selectedSegIds: new Set() });
+  },
+
+  setInReview: async (segId) => {
+    const { currentProject, prepareUndo } = get();
+    prepareUndo(segId);
+    try {
+      const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'in_review' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+      }
+    } catch { /* silent */ }
   },
 
   skipRow: async (segId) => {
@@ -208,15 +293,17 @@ const useSubtiStore = create((set, get) => ({
     prepareUndo(segId);
     const seg = segments.find(s => s.id === segId);
     if (!seg) return;
-    const res = await fetch(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'skipped', translation: seg.original }),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
-    }
+    try {
+      const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'skipped', translation: seg.original }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+      }
+    } catch { /* silent */ }
   },
 
   bulkSkipCandidates: async () => {
@@ -251,6 +338,27 @@ const useSubtiStore = create((set, get) => ({
     if (res.ok) {
       const updated = await res.json();
       set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+    }
+  },
+
+  translateSnippet: async (text) => {
+    const { currentProject } = get();
+    if (!currentProject) return { success: false, error: "Project tidak ditemukan" };
+    try {
+      const res = await fetch(`${API}/api/translate/${currentProject.id}/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { success: true, translation: data.translation };
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        return { success: false, error: errorData.detail || `Server error (${res.status})` };
+      }
+    } catch (err) {
+      return { success: false, error: "Koneksi terputus. Pastikan internet Anda aktif lalu coba lagi." };
     }
   },
 

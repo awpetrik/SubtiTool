@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from db import Base
 
-VALID_STATUSES = {"pending", "ai_done", "flagged", "in_review", "approved"}
+VALID_STATUSES = {"pending", "ai_done", "flagged", "in_review", "approved", "skipped"}
 
 class Segment(Base):
     __tablename__ = "segments"

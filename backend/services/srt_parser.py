@@ -30,6 +30,18 @@ def parse_srt(content: str) -> List[Dict]:
 def serialize_srt(segments: List[Dict]) -> str:
     parts = []
     for seg in segments:
-        translation = seg.get('translation') or seg.get('original', '')
-        parts.append(f"{seg['index']}\n{seg['timecode_start']} --> {seg['timecode_end']}\n{translation}")
-    return '\n\n'.join(parts) + '\n'
+        # If pending, fallback to original. If otherwise empty, make it a single space to avoid parser breaks.
+        if seg.get('status') == 'pending':
+            translation = seg.get('translation') or seg.get('original', '')
+        else:
+            translation = seg.get('translation')
+            if translation is None or translation.strip() == '':
+                translation = ' ' # Single space to keep subtitle block valid but invisible
+                
+        # Fix inner newlines just in case they are inconsistent
+        translation = translation.replace('\r\n', '\n').replace('\n', '\r\n')
+        parts.append(f"{seg['index']}\r\n{seg['timecode_start']} --> {seg['timecode_end']}\r\n{translation}")
+    return '\ufeff' + '\r\n\r\n'.join(parts) + '\r\n'
+
+
+
