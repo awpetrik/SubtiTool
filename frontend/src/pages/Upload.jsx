@@ -45,17 +45,87 @@ const LANG_TO_OPTIONS = [
     { value: 'ko', label: 'Korean' },
 ];
 
-const TIPS = [
-    "Gunakan J/K untuk navigasi cepat di editor.",
-    "Tekan S untuk skip baris lirik otomatis (di editor).",
-    "Gunakan Ctrl+H untuk Find & Replace global.",
-    "Batas nyaman membaca adalah maksimal 17 CPS (Characters Per Second).",
-    "Pintasan Shift+S bisa mereplace semua kandidat lirik/SFX serentak."
+const EN_TIPS = [
+    "Use J/K for fast navigation in the editor.",
+    "Press S to skip lyrics automatically (in editor).",
+    "Use Ctrl+H for global Find & Replace.",
+    "A comfortable reading speed is max 17 CPS (Characters Per Second).",
+    "Shortcut Shift+S can replace all lyrics/SFX candidates at once."
 ];
+
+const DICT = {
+    en: {
+        subtitleProcess: "AI Subtitle Workflow",
+        noProjects: "No saved projects",
+        savedProjects: "SAVED PROJECTS",
+        timeAgo: "ago",
+        tipsPrefix: "Tip",
+        fileLabel: "SRT FILE",
+        dragDrop1: "Drag & Drop .srt file here",
+        dragDrop2: "or click to select file",
+        onlySrt: "Only .srt files are accepted.",
+        selectedFile: "Selected file:",
+        contextLabel: "MOVIE CONTEXT",
+        titleLabel: "Movie / Series Title",
+        titlePlaceholder: "e.g. Breaking Bad",
+        genreLabel: "Genre",
+        genrePlaceholder: "Crime, Drama",
+        charLabel: "Main Characters",
+        charPlaceholder: "Walter, Jesse",
+        translationLabel: "TRANSLATION",
+        engineLabel: "Translation Engine",
+        engineGeminiReq: "API key is required for Gemini engine.",
+        autoSkipLabel: "AUTO-SKIP (SAVE API/TIME)",
+        skipLyricsOpt: "Skip song lyrics (♪)",
+        skipSfxOpt: "Skip Sound Effects ([Music])",
+        btnTranslating: "Deploying & Starting...",
+        btnStartManual: "Start Workflow",
+        btnStartEngine: "Start Translation",
+        errNoFile: "Please select an SRT file first.",
+        confirmDelete: "Delete this project? All translation data will be permanently lost.",
+        untitled: "Untitled",
+        lines: "lines"
+    },
+    id: {
+        subtitleProcess: "Alur Kerja Subtitle AI",
+        noProjects: "Belum ada proyek tersimpan",
+        savedProjects: "PROYEK TERSIMPAN",
+        timeAgo: "yang lalu",
+        tipsPrefix: "Tips",
+        fileLabel: "FILE SRT",
+        dragDrop1: "Drag & Drop file .srt ke sini",
+        dragDrop2: "atau klik untuk pilih file",
+        onlySrt: "Hanya file .srt yang diterima.",
+        selectedFile: "File terpilih:",
+        contextLabel: "KONTEKS FILM",
+        titleLabel: "Judul Film / Series",
+        titlePlaceholder: "Mis. Breaking Bad",
+        genreLabel: "Genre",
+        genrePlaceholder: "Crime, Drama",
+        charLabel: "Karakter Utama",
+        charPlaceholder: "Walter, Jesse",
+        translationLabel: "TERJEMAHAN",
+        engineLabel: "Engine Terjemahan",
+        engineGeminiReq: "API key wajib diisi untuk engine Gemini.",
+        autoSkipLabel: "AUTO-SKIP (HEMAT API/WAKTU)",
+        skipLyricsOpt: "Skip baris nyanyian (♪)",
+        skipSfxOpt: "Skip Sound Effects ([Music])",
+        btnTranslating: "Otentikasi & Memulai...",
+        btnStartManual: "Mulai Workflow",
+        btnStartEngine: "Mulai Translate",
+        errNoFile: "Pilih file SRT terlebih dahulu.",
+        confirmDelete: "Hapus project ini? Semua data terjemahan akan hilang permanen.",
+        untitled: "Tanpa Judul",
+        lines: "baris"
+    }
+};
 
 export default function UploadPage() {
     const navigate = useNavigate();
     const fileRef = useRef(null);
+    const [uiLang, setUiLang] = useState(localStorage.getItem('ui_lang') || 'en');
+    const t = DICT[uiLang];
+    const tipsList = uiLang === 'en' ? EN_TIPS : TIPS;
 
     const [file, setFile] = useState(null);
     const [lineCount, setLineCount] = useState(0);
@@ -93,22 +163,22 @@ export default function UploadPage() {
 
     const handleDeleteProject = async (e, pid) => {
         e.stopPropagation();
-        if (!confirm('Hapus project ini? Semua data terjemahan akan hilang permanen.')) return;
+        if (!confirm(t.confirmDelete)) return;
         await fetch(`${API}/api/projects/${pid}`, { method: 'DELETE' });
         setProjects(prev => prev.filter(p => p.id !== pid));
     };
 
     useEffect(() => {
-        const t = setInterval(() => setTipIdx(i => (i + 1) % TIPS.length), 4000);
+        const interval = setInterval(() => setTipIdx(i => (i + 1) % tipsList.length), 4000);
         fetchProjects();
-        return () => clearInterval(t);
-    }, []);
+        return () => clearInterval(interval);
+    }, [uiLang, tipsList.length]);
 
     const handleFile = useCallback((f) => {
         setFileError('');
         if (!f) return;
         if (!f.name.toLowerCase().endsWith('.srt')) {
-            setFileError('Hanya file .srt yang diterima.');
+            setFileError(t.onlySrt);
             setFile(null);
             setLineCount(0);
             return;
@@ -184,7 +254,7 @@ export default function UploadPage() {
         e.preventDefault();
         // Guard: jangan izinkan submit ganda
         if (phase === 'translating') return;
-        if (!file) { setSubmitError('Pilih file SRT terlebih dahulu.'); return; }
+        if (!file) { setSubmitError(t.errNoFile); return; }
 
         setSubmitError('');
         setProgress({ processed: 0, total: 0, logs: [] });
@@ -260,6 +330,20 @@ export default function UploadPage() {
 
     return (
         <div className="upload-container">
+            {/* Context Actions / Top Utilities */}
+            <div style={{ position: 'absolute', top: 24, right: 36, display: 'flex', gap: 6, background: 'rgba(12,12,14,0.8)', padding: 6, borderRadius: 10, border: '1px solid #27272a', zIndex: 10 }}>
+                <button
+                    type="button"
+                    onClick={() => { setUiLang('en'); localStorage.setItem('ui_lang', 'en'); }}
+                    style={{ background: uiLang === 'en' ? '#f59e0b' : 'transparent', color: uiLang === 'en' ? '#09090b' : '#71717a', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, padding: '4px 8px', cursor: 'pointer', transition: 'all 0.2s' }}
+                >EN</button>
+                <button
+                    type="button"
+                    onClick={() => { setUiLang('id'); localStorage.setItem('ui_lang', 'id'); }}
+                    style={{ background: uiLang === 'id' ? '#f59e0b' : 'transparent', color: uiLang === 'id' ? '#09090b' : '#71717a', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, padding: '4px 8px', cursor: 'pointer', transition: 'all 0.2s' }}
+                >ID</button>
+            </div>
+
             <style>{`
                 .upload-container {
                     display: flex; height: 100vh; overflow: hidden;
@@ -380,7 +464,7 @@ export default function UploadPage() {
                     <div style={{ fontSize: 22, color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 7 }}>
                         <Hexagon size={20} fill="currentColor" /> SubtiTool
                     </div>
-                    <p style={{ color: '#3f3f46', margin: '3px 0 0', fontSize: 11 }}>AI Subtitle Workflow</p>
+                    <p style={{ color: '#3f3f46', margin: '3px 0 0', fontSize: 11 }}>{t.subtitleProcess}</p>
                 </div>
 
                 {/* Scrollable project list */}
@@ -388,12 +472,12 @@ export default function UploadPage() {
                     {projects.length === 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, opacity: 0.35 }}>
                             <FolderOpen size={28} color="#52525b" />
-                            <p style={{ margin: 0, fontSize: 12, color: '#52525b', textAlign: 'center' }}>Belum ada proyek tersimpan</p>
+                            <p style={{ margin: 0, fontSize: 12, color: '#52525b', textAlign: 'center' }}>{t.noProjects}</p>
                         </div>
                     ) : (
                         <>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: '#3f3f46', textTransform: 'uppercase', letterSpacing: 1 }}>Proyek Tersimpan</span>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: '#3f3f46', textTransform: 'uppercase', letterSpacing: 1 }}>{t.savedProjects}</span>
                                 <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.1)', color: '#78716c', padding: '1px 6px', borderRadius: 20 }}>{projects.length}</span>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -434,12 +518,12 @@ export default function UploadPage() {
                                             {/* Info */}
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ fontSize: 13, fontWeight: 600, color: '#d4d4d8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
-                                                    {p.title || 'Untitled'}
+                                                    {p.title || t.untitled}
                                                 </div>
                                                 <div style={{ fontSize: 11, color: '#3f3f46', display: 'flex', gap: 5, alignItems: 'center' }}>
                                                     <span style={{ color: '#52525b' }}>{p.lang_from?.toUpperCase()} → {p.lang_to?.toUpperCase()}</span>
                                                     <span>·</span>
-                                                    <span>{timeAgo}</span>
+                                                    <span>{timeAgo} {t.timeAgo}</span>
                                                 </div>
                                             </div>
                                             {/* Delete */}
@@ -464,7 +548,7 @@ export default function UploadPage() {
                 <div className="upload-left-footer">
                     <p style={{ margin: 0, fontSize: 10, color: '#3f3f46', fontStyle: 'italic', display: 'flex', alignItems: 'flex-start', gap: 5, lineHeight: 1.5 }}>
                         <Lightbulb size={11} color="#52525b" style={{ flexShrink: 0, marginTop: 1 }} />
-                        {TIPS[tipIdx]}
+                        {tipsList[tipIdx]}
                     </p>
                 </div>
             </div>
@@ -475,7 +559,7 @@ export default function UploadPage() {
 
                     {/* File Drop Zone */}
                     <div>
-                        <label className="upload-label">File SRT</label>
+                        <label className="upload-label">{t.fileLabel}</label>
                         {!file ? (
                             <div
                                 className={`drop-zone ${dragOver ? 'active' : ''} ${fileError ? 'error' : ''}`}
@@ -488,8 +572,8 @@ export default function UploadPage() {
                                 <input ref={fileRef} type="file" accept=".srt" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
                                 <UploadCloud size={24} color={fileError ? '#ef4444' : '#52525b'} style={{ flexShrink: 0 }} />
                                 <div>
-                                    <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#d4d4d8' }}>Drag &amp; Drop file .srt ke sini</p>
-                                    <p style={{ margin: 0, fontSize: 11, color: '#52525b' }}>atau <span style={{ color: '#f59e0b', cursor: 'pointer' }}>klik untuk pilih file</span></p>
+                                    <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#d4d4d8' }}>{t.dragDrop1}</p>
+                                    <p style={{ margin: 0, fontSize: 11, color: '#52525b' }}>{t.dragDrop2.replace('klik', '')} <span style={{ color: '#f59e0b', cursor: 'pointer' }}>{t.dragDrop2.includes('klik') ? 'klik ' + t.dragDrop2.split('klik ')[1] : t.dragDrop2}</span></p>
                                     {fileError && <p style={{ color: '#ef4444', fontSize: 11, margin: '6px 0 0' }}>{fileError}</p>}
                                 </div>
                             </div>
@@ -498,7 +582,7 @@ export default function UploadPage() {
                                 <FileText size={16} color="#10b981" style={{ flexShrink: 0 }} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <p style={{ margin: 0, fontSize: 13, color: '#e4e4e7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</p>
-                                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#52525b' }}>{(file.size / 1024).toFixed(1)} KB &middot; ~{lineCount} baris</p>
+                                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#52525b' }}>{(file.size / 1024).toFixed(1)} KB &middot; ~{lineCount} {t.lines}</p>
                                 </div>
                                 <button type="button" onClick={() => { setFile(null); setFileError(''); }} style={{ background: 'transparent', border: '1px solid #27272a', padding: '4px', borderRadius: 4, color: '#52525b', cursor: 'pointer', display: 'flex' }}>
                                     <XCircle size={14} />
@@ -511,20 +595,20 @@ export default function UploadPage() {
                     <div className="upload-card">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
                             <Settings2 size={20} color="#f59e0b" />
-                            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: 1 }}>Konteks Film</h2>
+                            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: 1 }}>{t.contextLabel}</h2>
                         </div>
                         <div className="upload-grid3">
                             <div className="title-span pl-1">
-                                <label className="upload-label">Judul Film / Series</label>
-                                <input className="upload-input" placeholder="Mis. Breaking Bad" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+                                <label className="upload-label">{t.titleLabel}</label>
+                                <input className="upload-input" placeholder={t.titlePlaceholder} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
                             </div>
                             <div>
-                                <label className="upload-label">Genre</label>
-                                <input className="upload-input" placeholder="Crime, Drama" value={form.genre} onChange={e => setForm(f => ({ ...f, genre: e.target.value }))} />
+                                <label className="upload-label">{t.genreLabel}</label>
+                                <input className="upload-input" placeholder={t.genrePlaceholder} value={form.genre} onChange={e => setForm(f => ({ ...f, genre: e.target.value }))} />
                             </div>
                             <div>
-                                <label className="upload-label">Karakter Utama</label>
-                                <input className="upload-input" placeholder="Walter, Jesse" value={form.char_context} onChange={e => setForm(f => ({ ...f, char_context: e.target.value }))} />
+                                <label className="upload-label">{t.charLabel}</label>
+                                <input className="upload-input" placeholder={t.charPlaceholder} value={form.char_context} onChange={e => setForm(f => ({ ...f, char_context: e.target.value }))} />
                             </div>
                         </div>
                     </div>
@@ -563,7 +647,7 @@ export default function UploadPage() {
 
                     {/* Engine Selector */}
                     <div className="upload-card">
-                        <label className="upload-label" style={{ marginBottom: 8, fontSize: 13, textTransform: 'none', color: '#71717a' }}>Engine Terjemahan</label>
+                        <label className="upload-label" style={{ marginBottom: 8, fontSize: 13, textTransform: 'none', color: '#71717a' }}>{t.engineLabel}</label>
                         <div className="engine-tabs">
                             {ENGINES.map(eng => (
                                 <button
@@ -584,7 +668,7 @@ export default function UploadPage() {
                                     value={geminiKey} onChange={e => setGeminiKey(e.target.value)}
                                     style={{ borderColor: !geminiKey.trim() ? '#ef4444' : '#27272a' }}
                                 />
-                                {!geminiKey.trim() && <p style={{ fontSize: 11, color: '#ef4444', margin: '8px 0 0', fontWeight: 500 }}>API key wajib diisi untuk engine Gemini.</p>}
+                                {!geminiKey.trim() && <p style={{ fontSize: 11, color: '#ef4444', margin: '8px 0 0', fontWeight: 500 }}>{t.engineGeminiReq}</p>}
                             </div>
                         )}
 
@@ -610,7 +694,7 @@ export default function UploadPage() {
                         {/* Auto-Skip Preferences */}
                         <div className="upload-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                             <label style={{ fontSize: 11, fontWeight: 700, color: 'rgba(245, 158, 11, 0.8)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16, display: 'block' }}>
-                                Auto-Skip (Hemat API/Waktu)
+                                {t.autoSkipLabel}
                             </label>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -621,7 +705,7 @@ export default function UploadPage() {
                                     <input type="checkbox" style={{ display: 'none' }} checked={skipLyrics} onChange={e => setSkipLyrics(e.target.checked)} />
                                     <span style={{ fontSize: 14, color: skipLyrics ? '#fff' : '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, transition: 'color 0.2s' }}>
                                         <Music size={16} color="#71717a" />
-                                        Skip baris nyanyian (♪)
+                                        {t.skipLyricsOpt}
                                     </span>
                                 </label>
 
@@ -632,7 +716,7 @@ export default function UploadPage() {
                                     <input type="checkbox" style={{ display: 'none' }} checked={skipSfx} onChange={e => setSkipSfx(e.target.checked)} />
                                     <span style={{ fontSize: 14, color: skipSfx ? '#fff' : '#d4d4d8', display: 'flex', alignItems: 'center', gap: 8, transition: 'color 0.2s' }}>
                                         <VolumeX size={16} color="#71717a" />
-                                        Skip Sound Effects ([Music])
+                                        {t.skipSfxOpt}
                                     </span>
                                 </label>
                             </div>
@@ -646,10 +730,10 @@ export default function UploadPage() {
                                 </div>
                                 <div style={{ display: 'flex', gap: 8 }}>
                                     <button type="button" onClick={() => { setPhase('idle'); setSubmitError(''); }} style={{ background: 'transparent', color: '#fca5a5', border: '1px solid currentColor', padding: '4px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer' }}>
-                                        Batal/Ubah
+                                        {uiLang === 'en' ? 'Cancel/Change' : 'Batal/Ubah'}
                                     </button>
                                     <button type="button" onClick={projectId ? handleResume : () => { setPhase('idle'); setSubmitError(''); }} style={{ background: 'var(--red)', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: 3, fontSize: 11, cursor: 'pointer' }}>
-                                        {projectId ? 'Resume' : 'Tutup'}
+                                        {projectId ? 'Resume' : (uiLang === 'en' ? 'Close' : 'Tutup')}
                                     </button>
                                 </div>
                             </div>
@@ -677,18 +761,18 @@ export default function UploadPage() {
                                 {phase === 'translating' ? (
                                     <>
                                         <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 18, zIndex: 1 }}>
-                                            <Loader2 size={24} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> Mentranslate...
+                                            <Loader2 size={24} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> {uiLang === 'en' ? 'Translating...' : 'Mentranslate...'}
                                         </span>
-                                        <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(245, 158, 11, 0.6)', zIndex: 1 }}>{progress.processed} / {progress.total} baris ({pct}%)</span>
+                                        <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(245, 158, 11, 0.6)', zIndex: 1 }}>{progress.processed} / {progress.total} {t.lines} ({pct}%)</span>
                                     </>
                                 ) : (
                                     <>
                                         <span style={{ display: 'flex', alignItems: 'center', gap: 8, zIndex: 1 }}>
-                                            {isManual ? 'Buka Editor' : 'Mulai Translate'}
+                                            {isManual ? (uiLang === 'en' ? 'Open Editor' : 'Buka Editor') : t.btnStartEngine}
                                             <ChevronRight size={20} />
                                         </span>
                                         <span style={{ fontSize: 12, fontWeight: 500, color: isManual ? 'rgba(255,255,255,0.4)' : 'rgba(120, 53, 15, 0.6)', zIndex: 1 }}>
-                                            {isManual ? 'Mode Manual' : 'Mulai Workflow'}
+                                            {isManual ? (uiLang === 'en' ? 'Manual Mode' : 'Mode Manual') : t.btnStartManual}
                                         </span>
                                     </>
                                 )}
@@ -711,8 +795,10 @@ export default function UploadPage() {
 
 function getTimeAgo(date) {
     const diff = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (diff < 60) return 'baru saja';
-    if (diff < 3600) return `${Math.floor(diff / 60)} mnt lalu`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
-    return `${Math.floor(diff / 86400)} hari lalu`;
+    const lang = localStorage.getItem('ui_lang') || 'en';
+
+    if (diff < 60) return lang === 'en' ? 'just now' : 'baru saja';
+    if (diff < 3600) return `${Math.floor(diff / 60)} ${lang === 'en' ? 'm' : 'mnt'}`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} ${lang === 'en' ? 'h' : 'jam'}`;
+    return `${Math.floor(diff / 86400)} ${lang === 'en' ? 'd' : 'hari'}`;
 }
