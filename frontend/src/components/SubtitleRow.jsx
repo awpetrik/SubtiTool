@@ -12,6 +12,15 @@ const STATUS_CFG = {
     approved: { label: 'Approved', color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
 };
 
+// 5 palet warna yang kontras, elegan, namun lembut untuk mata di atas background dark
+const GLOSSARY_COLORS = [
+    { text: '#fcd34d', border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.2)' }, // Amber
+    { text: '#93c5fd', border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.2)' }, // Blue
+    { text: '#f9a8d4', border: '#ec4899', bg: 'rgba(236, 72, 153, 0.2)' }, // Pink
+    { text: '#a7f3d0', border: '#10b981', bg: 'rgba(16, 185, 129, 0.2)' }, // Emerald
+    { text: '#c4b5fd', border: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.2)' }  // Violet
+];
+
 function highlightGlossary(text, glossary) {
     if (!text || !glossary || glossary.length === 0) return text;
     // Sort terms by length desc to avoid partial matches
@@ -19,13 +28,23 @@ function highlightGlossary(text, glossary) {
     const validTerms = sorted.filter(g => g.source_term && g.source_term.trim() !== '');
     if (validTerms.length === 0) return text;
 
+    // Generate color mapping based on index of unique target terms, so same terminology = same color
+    const uniqueTargets = [...new Set(validTerms.map(g => g.target_term.toLowerCase()))];
+    const colorMap = {};
+    validTerms.forEach(g => {
+        const idx = uniqueTargets.indexOf(g.target_term.toLowerCase());
+        colorMap[g.target_term.toLowerCase()] = GLOSSARY_COLORS[idx % GLOSSARY_COLORS.length];
+    });
+
     const termsEscaped = validTerms.map(g => g.source_term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const regex = new RegExp(`\\b(${termsEscaped.join('|')})\\b`, 'gi');
 
     return text.replace(regex, (match) => {
         const entry = validTerms.find(g => g.source_term.toLowerCase() === match.toLowerCase());
         if (!entry) return match;
-        return `<mark title="Glossary: ${entry.target_term}" style="background: rgba(245, 158, 11, 0.2); border-bottom: 1px dotted var(--amber); color: var(--text); border-radius: 2px; padding: 0 2px; cursor: help;">${match}</mark>`;
+
+        const c = colorMap[entry.target_term.toLowerCase()];
+        return `<mark title="Glossary: ${entry.target_term}" style="background: ${c.bg}; border-bottom: 1px dotted ${c.border}; color: ${c.text}; border-radius: 2px; padding: 0 2px; cursor: help; font-weight: 600;">${match}</mark>`;
     });
 }
 
@@ -185,15 +204,18 @@ export default memo(function SubtitleRow({ seg }) {
                 </div>
 
                 {/* Original */}
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                     <p
-                        style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.5 }}
+                        style={{
+                            margin: 0, color: 'var(--text-muted)', lineHeight: 1.5,
+                            whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word'
+                        }}
                         dangerouslySetInnerHTML={{ __html: highlightGlossary(seg.original, glossary).replace(/\n/g, '<br/>') }}
                     />
                 </div>
 
                 {/* Translation — double-click to edit */}
-                <div style={{ flex: 1 }} onDoubleClick={() => startEdit(seg)}>
+                <div style={{ flex: 1, minWidth: 0 }} onDoubleClick={() => startEdit(seg)}>
                     {isEditing ? (
                         <textarea
                             autoFocus
@@ -259,15 +281,20 @@ export default memo(function SubtitleRow({ seg }) {
                             style={{
                                 width: '100%', background: 'var(--bg)', border: '1px solid var(--amber)',
                                 color: '#fff', padding: '4px 6px', borderRadius: 3, resize: 'none',
-                                fontFamily: 'var(--mono)', fontSize: 14, lineHeight: 1.5, outline: 'none',
-                                boxSizing: 'border-box', minHeight: 52,
+                                fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.5, outline: 'none',
+                                boxSizing: 'border-box', minHeight: 60,
+                                overflowWrap: 'break-word', wordBreak: 'break-word'
                             }}
                         />
                     ) : (
-                        <>
+                        <div style={{ minWidth: 0, width: '100%' }}>
                             {seg.translation ? (
                                 <p
-                                    style={{ margin: 0, color: 'var(--text)', lineHeight: 1.5 }}
+                                    style={{
+                                        margin: 0, color: 'var(--text)', lineHeight: 1.5,
+                                        whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word',
+                                        fontSize: 14
+                                    }}
                                     dangerouslySetInnerHTML={{ __html: highlightGlossary(seg.translation, glossary).replace(/\n/g, '<br/>') }}
                                 />
                             ) : (
@@ -280,7 +307,7 @@ export default memo(function SubtitleRow({ seg }) {
                                     <Flag size={12} fill="currentColor" /> {seg.flag_note}
                                 </p>
                             )}
-                        </>
+                        </div>
                     )}
                 </div>
 
