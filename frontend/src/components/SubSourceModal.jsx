@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 const API = 'http://localhost:8000';
 
-export default function SubSourceModal({ projectId, projectTitle, onClose }) {
+export default function SubSourceModal({ projectId, projectTitle, projectLangTo = 'id', onClose }) {
     const [apiKey, setApiKey] = useState(localStorage.getItem('subsource_key') || '');
     const [query, setQuery] = useState(projectTitle || '');
     const [results, setResults] = useState([]);
@@ -31,8 +31,16 @@ export default function SubSourceModal({ projectId, projectTitle, onClose }) {
         }
     };
 
-    const downloadSrt = () => {
-        window.open(`${API}/api/projects/${projectId}/export`, '_blank');
+    const downloadSrt = async () => {
+        const res = await fetch(`${API}/api/projects/${projectId}/export`);
+        const blob = await res.blob();
+        const safeTitle = (projectTitle || 'subtitle').replace(/[^a-zA-Z0-9 _-]/g, '_').trim();
+        const filename = `${safeTitle}_${projectLangTo}.srt`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
     };
 
     return (
@@ -96,7 +104,7 @@ export default function SubSourceModal({ projectId, projectTitle, onClose }) {
                 <div style={section}>
                     <p style={stepLabel}>3. Download file SRT hasil terjemahan</p>
                     <button onClick={downloadSrt} style={{ ...btnAmber, width: '100%' }}>
-                        ↓ Download SRT
+                        Download SRT
                     </button>
                 </div>
 

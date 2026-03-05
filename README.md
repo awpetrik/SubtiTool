@@ -21,8 +21,10 @@ An AI-powered subtitle translator and keyboard-centric editor designed to stream
 - Inline retranslation of individual segments with optional hint context
 
 **Editor**
+- Virtual scrolling architecture for infinite large subtitle project support without RAM bottleneck
+- Refined typography and readable UI tailored for desktop monitor viewing sizes
 - Keyboard-centric workflow with Vim-like navigation for zero-mouse operation
-- Status-based visual hierarchy: color-coded left borders indicate segment states (pending, ai_done, in_review, flagged, approved)
+- Status-based visual hierarchy: color-coded left borders indicate segment states
 - Context menu with right-click access to translate selection, retranslate, flag, skip, and copy actions
 - Inline text translation: select any text fragment and translate it directly in the editor
 - Undo history per segment

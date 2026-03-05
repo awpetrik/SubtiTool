@@ -259,7 +259,7 @@ export default memo(function SubtitleRow({ seg }) {
                             style={{
                                 width: '100%', background: 'var(--bg)', border: '1px solid var(--amber)',
                                 color: '#fff', padding: '4px 6px', borderRadius: 3, resize: 'none',
-                                fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.5, outline: 'none',
+                                fontFamily: 'var(--mono)', fontSize: 14, lineHeight: 1.5, outline: 'none',
                                 boxSizing: 'border-box', minHeight: 52,
                             }}
                         />
@@ -271,12 +271,12 @@ export default memo(function SubtitleRow({ seg }) {
                                     dangerouslySetInnerHTML={{ __html: highlightGlossary(seg.translation, glossary).replace(/\n/g, '<br/>') }}
                                 />
                             ) : (
-                                <p style={{ margin: 0, color: 'rgba(245,158,11,0.45)', lineHeight: 1.5, fontStyle: 'italic', fontSize: 12 }}>
+                                <p style={{ margin: 0, color: 'rgba(245,158,11,0.45)', lineHeight: 1.5, fontStyle: 'italic', fontSize: 13 }}>
                                     ✦ belum ditranslate
                                 </p>
                             )}
                             {seg.flag_note && (
-                                <p style={{ margin: '4px 0 0', color: 'var(--red)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <p style={{ margin: '4px 0 0', color: 'var(--red)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <Flag size={12} fill="currentColor" /> {seg.flag_note}
                                 </p>
                             )}
@@ -289,7 +289,7 @@ export default memo(function SubtitleRow({ seg }) {
                     {isSkipped ? (
                         <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
-                            padding: '3px 8px', borderRadius: 3, fontSize: 11,
+                            padding: '3px 8px', borderRadius: 3, fontSize: 12,
                             background: 'rgba(156,163,175,0.12)', color: '#9ca3af',
                             fontWeight: 600
                         }}>
@@ -298,7 +298,7 @@ export default memo(function SubtitleRow({ seg }) {
                     ) : (
                         <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
-                            padding: '3px 8px', borderRadius: 3, fontSize: 11,
+                            padding: '3px 8px', borderRadius: 3, fontSize: 12,
                             background: cfg.bg, color: cfg.color,
                         }}>
                             <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />

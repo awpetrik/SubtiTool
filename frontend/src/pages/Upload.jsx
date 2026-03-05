@@ -295,13 +295,13 @@ export default function UploadPage() {
                     padding: 20px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
                 }
                 .upload-label {
-                    font-size: 10px; font-weight: 600; color: #52525b; margin-left: 2px; margin-bottom: 5px; display: block;
+                    font-size: 11px; font-weight: 600; color: #52525b; margin-left: 2px; margin-bottom: 5px; display: block;
                     text-transform: uppercase; letter-spacing: 0.5px;
                 }
                 .upload-input {
                     width: 100%; padding: 10px 14px; background: #0c0c0e;
                     border: 1px solid #27272a; color: #fff; border-radius: 8px;
-                    font-size: 13px; box-sizing: border-box; outline: none; transition: all 0.2s;
+                    font-size: 14px; box-sizing: border-box; outline: none; transition: all 0.2s;
                 }
                 .upload-input:focus { border-color: rgba(245, 158, 11, 0.5); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1); }
                 .upload-input::placeholder { color: #3f3f46; }
@@ -318,7 +318,7 @@ export default function UploadPage() {
                 }
                 .engine-tab {
                     display: flex; align-items: center; justify-content: center; gap: 6px;
-                    padding: 7px 10px; font-size: 13px; font-weight: 500; cursor: pointer;
+                    padding: 8px 10px; font-size: 13px; font-weight: 500; cursor: pointer;
                     border-radius: 6px; transition: all 0.15s; border: none;
                 }
                 .engine-tab.active { background: #f59e0b; color: #09090b; }
@@ -433,10 +433,10 @@ export default function UploadPage() {
                                             </div>
                                             {/* Info */}
                                             <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: 12, fontWeight: 600, color: '#d4d4d8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
+                                                <div style={{ fontSize: 13, fontWeight: 600, color: '#d4d4d8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
                                                     {p.title || 'Untitled'}
                                                 </div>
-                                                <div style={{ fontSize: 10, color: '#3f3f46', display: 'flex', gap: 5, alignItems: 'center' }}>
+                                                <div style={{ fontSize: 11, color: '#3f3f46', display: 'flex', gap: 5, alignItems: 'center' }}>
                                                     <span style={{ color: '#52525b' }}>{p.lang_from?.toUpperCase()} → {p.lang_to?.toUpperCase()}</span>
                                                     <span>·</span>
                                                     <span>{timeAgo}</span>

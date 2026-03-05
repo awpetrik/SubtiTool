@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import uuid
 import re
 from typing import Optional
@@ -63,9 +64,17 @@ async def start_translate(
     if not segments_data:
         raise HTTPException(status_code=400, detail="File SRT tidak valid atau kosong.")
 
+    # Idempotency: cek apakah file yang sama sudah pernah diupload
+    file_hash = hashlib.sha1(raw.encode()).hexdigest()
+    existing = db.query(Project).filter(Project.file_hash == file_hash).first()
+    if existing:
+        seg_count = db.query(Segment).filter(Segment.project_id == existing.id).count()
+        return {"job_id": None, "project_id": existing.id, "total": seg_count, "resumed": True}
+
     project = Project(
         title=title, genre=genre, char_context=char_context,
         lang_from=lang_from, lang_to=lang_to, engine=engine,
+        file_hash=file_hash,
     )
     db.add(project)
     db.commit()

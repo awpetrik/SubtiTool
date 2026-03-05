@@ -36,7 +36,7 @@ body,
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -60,7 +60,7 @@ select {
   outline: none;
   border-radius: 4px;
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 input:focus,

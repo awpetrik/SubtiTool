@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -11,7 +11,7 @@ from services import subsource
 router = APIRouter(tags=["export"])
 
 
-@router.get("/api/projects/{project_id}/export", response_class=PlainTextResponse)
+@router.get("/api/projects/{project_id}/export")
 def export_srt(project_id: int, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -30,11 +30,12 @@ def export_srt(project_id: int, db: Session = Depends(get_db)):
         for s in segments
     ]
     srt_content = serialize_srt(data)
-    filename = f"{project.title.replace(' ', '_')}_{project.lang_to}.srt"
-    return PlainTextResponse(
-        content=srt_content,
+    safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in project.title).strip()
+    filename = f"{safe_title}_{project.lang_to}.srt"
+    return Response(
+        content=srt_content.encode("utf-8"),
+        media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        media_type="application/x-subrip; charset=utf-8",
     )
 
 

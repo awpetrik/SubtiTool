@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import useSubtiStore from '../store/useSubtiStore';
@@ -10,6 +10,7 @@ import FindReplaceModal from '../components/FindReplaceModal';
 import WaveSurfer from 'wavesurfer.js';
 import { Menu, Item, Separator } from 'react-contexify';
 import 'react-contexify/dist/ReactContexify.css';
+import { VariableSizeList } from 'react-window';
 
 const API = 'http://localhost:8000';
 
@@ -24,18 +25,51 @@ const STATUS_CFG = {
 
 const FILTERS = ['all', 'ai_done', 'flagged', 'in_review', 'approved', 'skipped', 'pending'];
 
-import { memo } from 'react';
+const ROW_HEIGHT_NORMAL = 76;
+const ROW_HEIGHT_EDITING = 148;
 
-const SubtitleList = memo(function SubtitleList({ segments, filterStatus }) {
+const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRef }) {
     const filtered = filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
+    const editingId = useSubtiStore(state => state.editingId);
+    const sizeMap = useRef({});
+
+    const getSize = useCallback((index) => {
+        const seg = filtered[index];
+        if (!seg) return ROW_HEIGHT_NORMAL;
+        return editingId === seg.id ? ROW_HEIGHT_EDITING : ROW_HEIGHT_NORMAL;
+    }, [filtered, editingId]);
+
+    // Reset size cache when editingId changes so VariableSizeList recalculates
+    useEffect(() => {
+        sizeMap.current = {};
+        if (listRef?.current) listRef.current.resetAfterIndex(0, false);
+    }, [editingId, filtered.length]);
+
     if (filtered.length === 0) {
         return (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', padding: 40 }}>
                 Tidak ada segment dengan filter ini.
             </div>
         );
     }
-    return filtered.map(seg => <SubtitleRow key={seg.id} seg={seg} />);
+
+    return (
+        <VariableSizeList
+            ref={listRef}
+            height={window.innerHeight - 52 - 41} // viewport - header - table-header
+            itemCount={filtered.length}
+            itemSize={getSize}
+            width="100%"
+            overscanCount={8}
+            style={{ outline: 'none' }}
+        >
+            {({ index, style }) => (
+                <div style={style}>
+                    <SubtitleRow seg={filtered[index]} />
+                </div>
+            )}
+        </VariableSizeList>
+    );
 });
 
 export default function EditorPage() {
@@ -97,6 +131,7 @@ export default function EditorPage() {
 
     const [showBackToTop, setShowBackToTop] = useState(false);
     const mainRef = useRef(null);
+    const listRef = useRef(null);
 
     useEffect(() => { if (id) loadProject(parseInt(id)); }, [id]);
 
@@ -112,13 +147,10 @@ export default function EditorPage() {
     const activeSegment = activeSegId ? segments.find(s => s.id === activeSegId) : null;
     const activeIndex = filtered.findIndex(s => s.id === activeSegId);
 
-    // Auto-scroll active row into view
+    // Auto-scroll active row into view via virtual list
     useEffect(() => {
-        if (activeSegId) {
-            const el = document.getElementById(`seg-${activeSegId}`);
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
+        if (activeIndex >= 0 && listRef.current) {
+            listRef.current.scrollToItem(activeIndex, 'smart');
         }
     }, [activeSegId]);
 
@@ -436,10 +468,20 @@ export default function EditorPage() {
                         </div>
                     </div>
                     <button
-                        onClick={() => window.open(`${API}/api/projects/${id}/export`, '_blank')}
+                        onClick={async () => {
+                            const res = await fetch(`${API}/api/projects/${id}/export`);
+                            const blob = await res.blob();
+                            const safeTitle = (currentProject?.title || 'subtitle').replace(/[^a-zA-Z0-9 _-]/g, '_').trim();
+                            const filename = `${safeTitle}_${currentProject?.lang_to || 'id'}.srt`;
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url; a.download = filename;
+                            document.body.appendChild(a); a.click();
+                            document.body.removeChild(a); URL.revokeObjectURL(url);
+                        }}
                         style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-dim)', padding: '5px 14px', borderRadius: 4, fontSize: 12 }}
                     >
-                        ↓ Export SRT
+                        Export SRT
                     </button>
                     <button
                         onClick={() => setShowSubSource(true)}
@@ -580,14 +622,13 @@ export default function EditorPage() {
                 {/* ── MAIN EDITOR ── */}
                 <main
                     ref={mainRef}
-                    onScroll={e => setShowBackToTop(e.target.scrollTop > 300)}
-                    style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}
+                    style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
                 >
                     {/* Table header */}
                     <div style={{
                         display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px',
                         borderBottom: '1px solid var(--border)', fontSize: 10, letterSpacing: 1,
-                        color: 'var(--text-muted)', position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 10,
+                        color: 'var(--text-muted)', background: 'var(--bg)', zIndex: 10, flexShrink: 0,
                     }}>
                         <span style={{ width: 36 }}>#</span>
                         <span style={{ width: 160 }}>TIMECODE</span>
@@ -597,7 +638,7 @@ export default function EditorPage() {
                         <span style={{ width: 116 }}>AKSI</span>
                     </div>
 
-                    <SubtitleList segments={segments} filterStatus={filterStatus} />
+                    <SubtitleList segments={segments} filterStatus={filterStatus} listRef={listRef} />
                 </main>
             </div>
 
@@ -605,6 +646,7 @@ export default function EditorPage() {
                 <SubSourceModal
                     projectId={id}
                     projectTitle={currentProject.title}
+                    projectLangTo={currentProject.lang_to}
                     onClose={() => setShowSubSource(false)}
                 />
             )}
