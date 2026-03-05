@@ -160,6 +160,7 @@ export default function EditorPage() {
                 height: 40,
                 barWidth: 2,
                 normalize: true,
+                backend: 'MediaElement', // Attempt to hint avoiding web-audio full-file decoding for massive files
                 media: videoRef.current
             });
             return () => wavesurferRef.current.destroy();
@@ -438,6 +439,10 @@ export default function EditorPage() {
     const handleVideoFile = (e) => {
         const file = e.target.files[0];
         if (file) {
+            // Warn about large 4K files crashing the Web Audio API/Browser
+            if (file.size > 1024 * 1024 * 1024) { // over 1GB
+                alert("Peringatan: Loading file video raksasa (>1GB) atau 4K HEVC di dalam browser bisa membuat prosesor kepanasan atau browser crash akibat batasan memori. Sangat disarankan untuk meng-ekspor versi Proxy (misal: 720p H.264 / MP4 ringan) untuk keperluan subtitling agar playback 100% lancar tanpa stutter.");
+            }
             setVideoSrc(URL.createObjectURL(file));
         }
     };
@@ -860,6 +865,10 @@ const Viewfinder = memo(({
                         onEnded={() => setIsPlaying(false)}
                         autoPlay={false}
                         controls={false}
+                        playsInline
+                        disablePictureInPicture
+                        disableRemotePlayback
+                        preload="auto"
                     />
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 12px 10px', background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)', pointerEvents: 'none' }}>
                         {activeTranslation && (
