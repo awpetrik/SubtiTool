@@ -8,7 +8,7 @@ load_dotenv()
 from db import engine, Base
 import models  # noqa: F401 — trigger model registration
 
-from routers import projects, glossary, translate, export
+from routers import projects, glossary, translate, export, proxy
 
 Base.metadata.create_all(bind=engine)
 
@@ -27,6 +27,7 @@ app.include_router(projects.router)
 app.include_router(glossary.router)
 app.include_router(translate.router)
 app.include_router(export.router)
+app.include_router(proxy.router)
 
 
 @app.get("/api/health")

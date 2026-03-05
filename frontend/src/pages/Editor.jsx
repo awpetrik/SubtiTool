@@ -436,15 +436,47 @@ export default function EditorPage() {
         setIsPlaying(!isPlaying);
     };
 
-    const handleVideoFile = (e) => {
+    const [isConvertingProxy, setIsConvertingProxy] = useState(false);
+
+    const handleVideoFile = async (e) => {
         const file = e.target.files[0];
-        if (file) {
-            // Warn about large 4K files crashing the Web Audio API/Browser
-            if (file.size > 1024 * 1024 * 1024) { // over 1GB
-                alert("Peringatan: Loading file video raksasa (>1GB) atau 4K HEVC di dalam browser bisa membuat prosesor kepanasan atau browser crash akibat batasan memori. Sangat disarankan untuk meng-ekspor versi Proxy (misal: 720p H.264 / MP4 ringan) untuk keperluan subtitling agar playback 100% lancar tanpa stutter.");
+        if (!file) return;
+
+        // Auto-detect Heavy file/MKV (Limit over 300MB)
+        if (file.size > 300 * 1024 * 1024 || file.name.endsWith('.mkv') || file.name.endsWith('.avi')) {
+            const wantsProxy = window.confirm(
+                "Video ini berukuran besar/formatnya berat.\nIni bisa bikin browser nge-lag atau crash (patah-patah).\n\nMau saya kecilkan otomatis fiturnya jadi resolusi 480p di background? (Bisa ditinggal kerja/nge-sub dulu)"
+            );
+
+            if (wantsProxy) {
+                setIsConvertingProxy(true);
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const res = await fetch(`${API}/api/proxy/convert`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!res.ok) throw new Error("Gagal convert proxy");
+
+                    const blob = await res.blob();
+                    const proxyUrl = URL.createObjectURL(blob);
+                    setVideoSrc(proxyUrl);
+                } catch (err) {
+                    console.error(err);
+                    alert("Aduh, gagal convert proxy otomatis. Kita coba load aslinya aja ya...");
+                    setVideoSrc(URL.createObjectURL(file));
+                } finally {
+                    setIsConvertingProxy(false);
+                }
+                return;
             }
-            setVideoSrc(URL.createObjectURL(file));
         }
+
+        // Default (Tolak konversi / file ringan)
+        setVideoSrc(URL.createObjectURL(file));
     };
 
     const fmtTime = t => {
@@ -568,6 +600,7 @@ export default function EditorPage() {
                             setIsPlaying={setIsPlaying}
                             onTimeUpdate={handleVideoTimeUpdate}
                             handleVideoFile={handleVideoFile}
+                            isConvertingProxy={isConvertingProxy}
                             togglePlay={togglePlay}
                             activeTranslation={activeSegment?.translation}
                         />
@@ -842,7 +875,7 @@ const fmtTime = t => {
 
 const Viewfinder = memo(({
     videoSrc, videoRef, waveformRef, isPlaying, setIsPlaying,
-    onTimeUpdate, handleVideoFile,
+    onTimeUpdate, handleVideoFile, isConvertingProxy,
     togglePlay, activeTranslation
 }) => {
     const [videoTime, setVideoTime] = useState(0);
@@ -880,34 +913,45 @@ const Viewfinder = memo(({
                 </div>
             ) : (
                 <div style={{ height: 140, background: 'var(--bg-2)', borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', padding: 16, textAlign: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Load a video/audio file to preview sync</span>
-                    <label style={{ display: 'inline-block', background: 'var(--amber)', color: '#000', padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                        Load Media
-                        <input type="file" accept="video/*,audio/*" onChange={handleVideoFile} style={{ display: 'none' }} />
-                    </label>
+                    {isConvertingProxy ? (
+                        <>
+                            <div style={{ display: 'inline-block', width: 24, height: 24, border: '3px solid var(--amber)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                            <span style={{ fontSize: 11, color: 'var(--amber)' }}>Sedang mengecilkan resolusi video... (Tunggu sebentar)</span>
+                        </>
+                    ) : (
+                        <>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Load a video/audio file to preview sync</span>
+                            <label style={{ display: 'inline-block', background: 'var(--amber)', color: '#000', padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                                Load Media
+                                <input type="file" accept="video/*,audio/*" onChange={handleVideoFile} style={{ display: 'none' }} />
+                            </label>
+                        </>
+                    )}
                 </div>
             )}
 
-            {videoSrc && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <button onClick={togglePlay} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
-                            {isPlaying ? '⏸' : '▶'}
-                        </button>
-                        <div title="Seek Video" onClick={e => {
-                            if (!videoRef.current) return;
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const pct = (e.clientX - rect.left) / rect.width;
-                            videoRef.current.currentTime = pct * videoRef.current.duration;
-                        }} style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
-                            <div style={{ height: '100%', background: 'var(--amber)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
+            {
+                videoSrc && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <button onClick={togglePlay} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
+                                {isPlaying ? '⏸' : '▶'}
+                            </button>
+                            <div title="Seek Video" onClick={e => {
+                                if (!videoRef.current) return;
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const pct = (e.clientX - rect.left) / rect.width;
+                                videoRef.current.currentTime = pct * videoRef.current.duration;
+                            }} style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+                                <div style={{ height: '100%', background: 'var(--amber)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
+                            </div>
+                            <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
                         </div>
-                        <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
+                        {/* Waveform Container */}
+                        <div ref={waveformRef} style={{ width: '100%', overflow: 'hidden', borderRadius: 4, background: '#111' }} />
                     </div>
-                    {/* Waveform Container */}
-                    <div ref={waveformRef} style={{ width: '100%', overflow: 'hidden', borderRadius: 4, background: '#111' }} />
-                </div>
-            )}
+                )
+            }
         </>
     );
 });
