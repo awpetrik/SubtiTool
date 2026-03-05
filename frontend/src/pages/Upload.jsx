@@ -213,7 +213,7 @@ export default function UploadPage() {
                 .upload-left {
                     flex: 0 0 40%; max-width: 40%; background: #0c0c0e; border-right: 1px solid var(--border);
                     display: flex; flex-direction: column; padding: 32px;
-                    justify-content: space-between;
+                    justify-content: center; align-items: center;
                     box-sizing: border-box;
                 }
                 .upload-right {
@@ -222,7 +222,8 @@ export default function UploadPage() {
                     box-sizing: border-box;
                 }
                 .upload-form {
-                    display: flex; flex-direction: column; gap: 16px; height: 100%; max-width: 640px; margin: 0 auto; width: 100%;
+                    display: flex; flex-direction: column; height: 100%; max-width: 640px; margin: 0 auto; width: 100%;
+                    justify-content: space-between;
                 }
                 .upload-label {
                     font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
@@ -257,9 +258,10 @@ export default function UploadPage() {
                 }
 
                 .drop-zone {
-                    flex: 1; border: 2px dashed var(--border); border-radius: 8px;
+                    width: 100%; height: 180px; flex-shrink: 0;
+                    border: 2px dashed var(--border); border-radius: 8px;
                     display: flex; flex-direction: column; align-items: center; justify-content: center;
-                    cursor: pointer; transition: all 0.2s; text-align: center;
+                    cursor: pointer; transition: all 0.2s; text-align: center; box-sizing: border-box;
                 }
                 .drop-zone:hover { border-color: var(--amber); background: rgba(245,158,11,0.03); }
                 .drop-zone.active { border-color: var(--amber); background: rgba(245,158,11,0.08); }
@@ -275,50 +277,53 @@ export default function UploadPage() {
 
             {/* ── LEFT PANEL ── */}
             <div className="upload-left">
-                <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                    <div style={{ fontSize: 28, color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        <Hexagon size={24} fill="currentColor" /> SubtiTool
+                <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ textAlign: 'center', marginBottom: 32 }}>
+                        <div style={{ fontSize: 28, color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            <Hexagon size={24} fill="currentColor" /> SubtiTool
+                        </div>
+                        <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 12 }}>Next-Gen AI Subtitle Workflow</p>
                     </div>
-                    <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 12 }}>Next-Gen AI Subtitle Workflow</p>
-                </div>
 
-                {!file ? (
-                    <div
-                        className={`drop-zone ${dragOver ? 'active' : ''} ${fileError ? 'error' : ''}`}
-                        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                        onDragLeave={() => setDragOver(false)}
-                        onDrop={handleDrop}
-                        onClick={() => fileRef.current?.click()}
-                    >
-                        <input ref={fileRef} type="file" accept=".srt" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
-                        <UploadCloud size={40} color={fileError ? 'var(--red)' : 'var(--amber)'} style={{ marginBottom: 16, opacity: 0.8 }} />
-                        <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text)' }}>
-                            Drag & Drop file SRT ke area ini
-                        </p>
-                        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-dim)' }}>Atau klik untuk browse file dari komputer</p>
-                        {fileError && <p style={{ color: 'var(--red)', fontSize: 11, marginTop: 12, fontWeight: 600 }}>{fileError}</p>}
-                    </div>
-                ) : (
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ padding: 20, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                            <CheckCircle2 size={36} color="var(--green)" style={{ marginBottom: 12 }} />
-                            <h3 style={{ margin: '0 0 4px', fontSize: 14, color: 'var(--green)', textAlign: 'center', wordBreak: 'break-all' }}>{file.name}</h3>
-                            <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>
-                                <span>{(file.size / 1024).toFixed(1)} KB</span>
-                                <span>&bull;</span>
-                                <span>~{lineCount} baris</span>
+                    {!file ? (
+                        <div
+                            className={`drop-zone ${dragOver ? 'active' : ''} ${fileError ? 'error' : ''}`}
+                            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                            onDragLeave={() => setDragOver(false)}
+                            onDrop={handleDrop}
+                            onClick={() => fileRef.current?.click()}
+                        >
+                            <input ref={fileRef} type="file" accept=".srt" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
+                            <UploadCloud size={32} color={fileError ? 'var(--red)' : 'var(--amber)'} style={{ marginBottom: 12, opacity: 0.8 }} />
+                            <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text)' }}>
+                                Drag & Drop file SRT ke area ini
+                            </p>
+                            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-dim)' }}>Atau klik untuk browse file dari komputer</p>
+                            {fileError && <p style={{ color: 'var(--red)', fontSize: 11, marginTop: 12, fontWeight: 600 }}>{fileError}</p>}
+                        </div>
+                    ) : (
+                        <div style={{
+                            width: '100%', height: 56, background: 'var(--bg-1)', border: '1px solid var(--border)',
+                            borderRadius: 8, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, boxSizing: 'border-box'
+                        }}>
+                            <FileText size={20} color="var(--green)" style={{ flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <p style={{ margin: 0, fontSize: 13, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</p>
+                                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                                    {(file.size / 1024).toFixed(1)} KB &bull; ~{lineCount} baris
+                                </p>
                             </div>
-                            <button onClick={() => { setFile(null); setFileError(''); }} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 4, color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', transition: 'all 0.15s' }}>
-                                Ganti File SRT
+                            <button onClick={() => { setFile(null); setFileError(''); }} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', padding: '6px', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <XCircle size={14} />
                             </button>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                <div style={{ marginTop: 20, textAlign: 'center', height: 20 }}>
-                    <p style={{ margin: 0, fontSize: 11, color: '#555', fontStyle: 'italic', transition: 'opacity 0.3s' }}>
-                        💡 Tip: {TIPS[tipIdx]}
-                    </p>
+                    <div style={{ marginTop: 16, textAlign: 'center', height: 20 }}>
+                        <p style={{ margin: 0, fontSize: 11, color: '#555', fontStyle: 'italic', transition: 'opacity 0.3s' }}>
+                            💡 Tip: {TIPS[tipIdx]}
+                        </p>
+                    </div>
                 </div>
             </div>
 
