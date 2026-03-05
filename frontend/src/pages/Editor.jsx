@@ -173,6 +173,24 @@ export default function EditorPage() {
 
     useEffect(() => { if (id) loadProject(parseInt(id)); }, [id]);
 
+    useEffect(() => {
+        if (id) {
+            const savedProxyUrl = localStorage.getItem(`project_proxy_${id}`);
+            if (savedProxyUrl) {
+                // Verify if the proxy file still exists on the server to prevent dead links
+                fetch(savedProxyUrl, { method: 'HEAD' })
+                    .then(res => {
+                        if (res.ok && !videoSrc) {
+                            setVideoSrc(savedProxyUrl);
+                        } else if (!res.ok) {
+                            localStorage.removeItem(`project_proxy_${id}`);
+                        }
+                    })
+                    .catch(() => { });
+            }
+        }
+    }, [id]);
+
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [showFindReplace, setShowFindReplace] = useState(false);
 
@@ -445,6 +463,23 @@ export default function EditorPage() {
 
         // Auto-detect Heavy file/MKV (Limit over 300MB)
         if (file.size > 300 * 1024 * 1024 || file.name.endsWith('.mkv') || file.name.endsWith('.avi')) {
+            // Cek apakah file ini sebelumnya sudah punya proxy yang masih hidup di server
+            const fileCacheKey = `proxy_url_${file.name}_${file.size}`;
+            const cachedUrl = localStorage.getItem(fileCacheKey);
+
+            if (cachedUrl) {
+                try {
+                    const checkRes = await fetch(cachedUrl, { method: 'HEAD' });
+                    if (checkRes.ok) {
+                        setVideoSrc(cachedUrl);
+                        if (id) localStorage.setItem(`project_proxy_${id}`, cachedUrl);
+                        return; // Proxy langsung ter-load tanpa harus nge-convert/upload ulang!
+                    } else {
+                        localStorage.removeItem(fileCacheKey);
+                    }
+                } catch (e) { }
+            }
+
             const wantsProxy = window.confirm(
                 "Video ini berukuran besar/formatnya berat.\nIni bisa bikin browser nge-lag atau crash (patah-patah).\n\nMau saya kecilkan otomatis fiturnya jadi resolusi 480p di background? (Bisa ditinggal kerja/nge-sub dulu)"
             );
@@ -491,7 +526,13 @@ export default function EditorPage() {
                             } else if (data.status === 'done') {
                                 setConvertStatus(null);
                                 setIsConvertingProxy(false);
-                                setVideoSrc(`${API}/temp_proxies/${taskId}_proxy.mp4`);
+                                const proxyUrl = `${API}/temp_proxies/${taskId}_proxy.mp4`;
+                                setVideoSrc(proxyUrl);
+
+                                // Simpan riwayat proxy ke localStorage
+                                localStorage.setItem(`proxy_url_${file.name}_${file.size}`, proxyUrl);
+                                if (id) localStorage.setItem(`project_proxy_${id}`, proxyUrl);
+
                             } else if (data.status === 'error') {
                                 throw new Error(data.error || "Gagal convert di server");
                             }
