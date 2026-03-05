@@ -187,6 +187,31 @@ const useSubtiStore = create((set, get) => ({
     }
   },
 
+  autoSaveEdit: async (segId, text) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+    set({ isSaving: true });
+    try {
+      const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ translation: text }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set({
+          segments: get().segments.map(s => s.id === segId ? updated : s),
+          isSaving: false,
+          lastSaved: new Date()
+        });
+      } else {
+        set({ isSaving: false });
+      }
+    } catch {
+      set({ isSaving: false });
+    }
+  },
+
   saveEditWithValue: async (segId, text) => {
     const { currentProject, prepareUndo } = get();
     prepareUndo(segId);

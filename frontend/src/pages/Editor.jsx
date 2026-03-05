@@ -18,12 +18,12 @@ import { VariableSizeList } from 'react-window';
 const API = 'http://localhost:8000';
 
 const STATUS_CFG = {
-    pending: { label: 'Pending', color: '#64748b', bg: 'rgba(100,116,139,0.12)', dot: '#64748b' },
+    pending: { label: 'Pending', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', dot: '#94a3b8' },
     ai_done: { label: 'AI Done', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', dot: '#f59e0b' },
     flagged: { label: 'Flagged', color: '#ef4444', bg: 'rgba(239,68,68,0.12)', dot: '#ef4444' },
-    in_review: { label: 'In Review', color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', dot: '#8b5cf6' },
+    in_review: { label: 'In Review', color: '#c084fc', bg: 'rgba(192,132,252,0.12)', dot: '#c084fc' },
     approved: { label: 'Approved', color: '#10b981', bg: 'rgba(16,185,129,0.12)', dot: '#10b981' },
-    skipped: { label: 'Skipped', color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', dot: '#9ca3af' },
+    skipped: { label: 'Skipped', color: '#d1d5db', bg: 'rgba(209,213,219,0.12)', dot: '#d1d5db' },
 };
 
 const FILTERS = ['all', 'ai_done', 'flagged', 'in_review', 'approved', 'skipped', 'pending'];
@@ -71,10 +71,17 @@ const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRe
         );
     }
 
+    const [listHeight, setListHeight] = useState(window.innerHeight - 52 - 41);
+    useEffect(() => {
+        const handleResize = () => setListHeight(window.innerHeight - 52 - 41);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     return (
         <VariableSizeList
             ref={listRef}
-            height={window.innerHeight - 52 - 41} // viewport - header - table-header
+            height={listHeight}
             itemCount={filtered.length}
             itemSize={getSize}
             width="100%"
@@ -127,7 +134,6 @@ export default function EditorPage() {
     })));
 
     const [showSubSource, setShowSubSource] = useState(false);
-    const [videoTime, setVideoTime] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
 
     // Viewfinder Native Playback
@@ -163,11 +169,27 @@ export default function EditorPage() {
     const lastKeyRef = useRef('');
 
     const stats = getStats();
-    // filtered is still calculated here for navigation math, but UI list generation is skipped
-    const filtered = filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
+    // Memoize filtered segments to avoid O(N) filter on EVERY playback frame
+    const filtered = useMemo(() => {
+        return filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
+    }, [segments, filterStatus]);
+
     const pctApproved = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0;
     const activeSegment = activeSegId ? segments.find(s => s.id === activeSegId) : null;
     const activeIndex = filtered.findIndex(s => s.id === activeSegId);
+
+    // Pre-calculate numerical seconds for all segments to avoid parsing during high-frequency playback events
+    const timeCache = useMemo(() => {
+        return filtered.map(s => ({
+            id: s.id,
+            start: timecodeToSeconds(s.timecode_start),
+            end: timecodeToSeconds(s.timecode_end)
+        }));
+    }, [filtered]);
+
+    const timeCacheRef = useRef([]);
+    useEffect(() => { timeCacheRef.current = timeCache; }, [timeCache]);
+
     const flaggingSeg = flaggingId ? segments.find(s => s.id === flaggingId) : null;
 
     // Auto-scroll active row into view via virtual list
@@ -389,21 +411,11 @@ export default function EditorPage() {
         }
     }, [activeSegId, activeSegment]);
 
-    const handleVideoTimeUpdate = () => {
-        if (!videoRef.current) return;
-        const curTime = videoRef.current.currentTime;
-        setVideoTime(curTime);
-
+    const handleVideoTimeUpdate = (curTime) => {
         if (isPlaying) {
-            const list = filteredRef.current;
-            const currentSeg = list.find(s => {
-                const start = timecodeToSeconds(s.timecode_start);
-                const end = timecodeToSeconds(s.timecode_end);
-                return curTime >= start && curTime <= end; // active strictly inside its time bounds
-            });
+            const cache = timeCacheRef.current;
+            const currentSeg = cache.find(s => curTime >= s.start && curTime <= s.end);
 
-            // If we're playing and entering a new segment, auto-advance Editor focus
-            // BUT do not hijack if the user is typing (editingId is not null)
             const isEditing = useSubtiStore.getState().editingId !== null;
             if (currentSeg && currentSeg.id !== activeSegRef.current?.id && !isEditing) {
                 useSubtiStore.getState().setActiveSegId(currentSeg.id);
@@ -535,57 +547,19 @@ export default function EditorPage() {
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden', height: 'calc(100vh - 52px)' }}>
                 {/* ── LEFT PANEL ── */}
                 <aside style={{ width: 260, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0, background: 'var(--bg-1)' }}>
-                    {/* Viewfinder */}
+                    {/* Isolated Viewfinder Component to prevent full-page re-renders on timeUpdate */}
                     <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {videoSrc ? (
-                            <div style={{ height: 140, background: '#000', borderRadius: 6, position: 'relative', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                <video
-                                    ref={videoRef}
-                                    src={videoSrc}
-                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                                    onTimeUpdate={handleVideoTimeUpdate}
-                                    onEnded={() => setIsPlaying(false)}
-                                    autoPlay={false}
-                                    controls={false}
-                                />
-                                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 12px 10px', background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)', pointerEvents: 'none' }}>
-                                    {activeSegment?.translation && (
-                                        <p style={{ margin: 0, color: '#fff', fontSize: 13, textAlign: 'center', textShadow: '0 1px 4px #000', fontFamily: 'sans-serif', whiteSpace: 'pre-wrap', lineHeight: 1.3 }}
-                                            dangerouslySetInnerHTML={{ __html: activeSegment.translation }}
-                                        />
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <div style={{ height: 140, background: 'var(--bg-2)', borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', padding: 16, textAlign: 'center', gap: 10 }}>
-                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Load a video/audio file to preview sync</span>
-                                <label style={{ display: 'inline-block', background: 'var(--amber)', color: '#000', padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                                    Load Media
-                                    <input type="file" accept="video/*,audio/*" onChange={handleVideoFile} style={{ display: 'none' }} />
-                                </label>
-                            </div>
-                        )}
-
-                        {videoSrc && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                    <button onClick={togglePlay} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
-                                        {isPlaying ? '⏸' : '▶'}
-                                    </button>
-                                    <div title="Seek Video" onClick={e => {
-                                        if (!videoRef.current) return;
-                                        const rect = e.currentTarget.getBoundingClientRect();
-                                        const pct = (e.clientX - rect.left) / rect.width;
-                                        videoRef.current.currentTime = pct * videoRef.current.duration;
-                                    }} style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
-                                        <div style={{ height: '100%', background: 'var(--amber)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
-                                    </div>
-                                    <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
-                                </div>
-                                {/* Waveform Container */}
-                                <div ref={waveformRef} style={{ width: '100%', overflow: 'hidden', borderRadius: 4, background: '#111' }} />
-                            </div>
-                        )}
+                        <Viewfinder
+                            videoSrc={videoSrc}
+                            videoRef={videoRef}
+                            waveformRef={waveformRef}
+                            isPlaying={isPlaying}
+                            setIsPlaying={setIsPlaying}
+                            onTimeUpdate={handleVideoTimeUpdate}
+                            handleVideoFile={handleVideoFile}
+                            togglePlay={togglePlay}
+                            activeTranslation={activeSegment?.translation}
+                        />
                     </div>
 
                     {/* Filter pills */}
@@ -679,130 +653,142 @@ export default function EditorPage() {
                         segments={segments}
                         filterStatus={filterStatus}
                         listRef={listRef}
-                        onScroll={({ scrollOffset }) => setShowBackToTop(scrollOffset > 400)}
+                        onScroll={useCallback(({ scrollOffset }) => {
+                            setShowBackToTop(scrollOffset > 400);
+                        }, [])}
                     />
                 </main>
             </div>
 
-            {showSubSource && (
-                <SubSourceModal
-                    projectId={id}
-                    projectTitle={currentProject.title}
-                    projectLangTo={currentProject.lang_to}
-                    onClose={() => setShowSubSource(false)}
-                />
-            )}
+            {
+                showSubSource && (
+                    <SubSourceModal
+                        projectId={id}
+                        projectTitle={currentProject.title}
+                        projectLangTo={currentProject.lang_to}
+                        onClose={() => setShowSubSource(false)}
+                    />
+                )
+            }
 
-            {showShortcuts && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)' }} onClick={() => setShowShortcuts(false)}>
-                    <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, width: 600, color: 'var(--text)', boxShadow: '0 10px 40px rgba(0,0,0,0.8)' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--amber)' }}><HelpCircle size={20} /> Keyboard Shortcuts</h3>
-                            <button onClick={() => setShowShortcuts(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)' }}><X size={20} /></button>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 30 }}>
-                            <div>
-                                <h4 style={{ margin: '0 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Navigation</h4>
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
-                                    <li><kbd style={kbd}>↑/↓</kbd> or <kbd style={kbd}>J/K</kbd>  <span style={{ float: 'right' }}>Move row</span></li>
-                                    <li><kbd style={kbd}>PgUp/Dn</kbd> <span style={{ float: 'right' }}>Jump 10 rows</span></li>
-                                    <li><kbd style={kbd}>gg</kbd> / <kbd style={kbd}>Shift+G</kbd> <span style={{ float: 'right' }}>First / Last row</span></li>
-                                </ul>
-                                <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Bulk Actions</h4>
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
-                                    <li><kbd style={kbd}>Space</kbd> <span style={{ float: 'right' }}>Toggle select</span></li>
-                                    <li><kbd style={kbd}>Shift+↑/↓</kbd> <span style={{ float: 'right' }}>Extend select</span></li>
-                                    <li><kbd style={kbd}>Ctrl+A</kbd> <span style={{ float: 'right' }}>Select all visible</span></li>
-                                    <li><kbd style={kbd}>Ctrl+Enter</kbd> <span style={{ float: 'right' }}>Approve selected</span></li>
-                                </ul>
+            {
+                showShortcuts && (
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)' }} onClick={() => setShowShortcuts(false)}>
+                        <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 8, padding: 24, width: 600, color: 'var(--text)', boxShadow: '0 10px 40px rgba(0,0,0,0.8)' }} onClick={e => e.stopPropagation()}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--amber)' }}><HelpCircle size={20} /> Keyboard Shortcuts</h3>
+                                <button onClick={() => setShowShortcuts(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)' }}><X size={20} /></button>
                             </div>
-                            <div>
-                                <h4 style={{ margin: '0 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Editing (in Row)</h4>
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
-                                    <li><kbd style={kbd}>Enter</kbd> / <kbd style={kbd}>F2</kbd> <span style={{ float: 'right' }}>Edit active row</span></li>
-                                    <li><kbd style={kbd}>Enter</kbd> <span style={{ float: 'right' }}>Save & Next</span></li>
-                                    <li><kbd style={kbd}>Shift+Enter</kbd> <span style={{ float: 'right' }}>Save & Stay</span></li>
-                                    <li><kbd style={kbd}>Tab</kbd> <span style={{ float: 'right' }}>Save & Edit Next</span></li>
-                                    <li><kbd style={kbd}>Esc</kbd> <span style={{ float: 'right' }}>Cancel edit</span></li>
-                                </ul>
-                                <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Actions</h4>
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
-                                    <li><kbd style={kbd}>A</kbd> <span style={{ float: 'right' }}>Approve row</span></li>
-                                    <li><kbd style={kbd}>F</kbd> <span style={{ float: 'right' }}>Flag for review</span></li>
-                                    <li><kbd style={kbd}>R</kbd> <span style={{ float: 'right' }}>Re-translate</span></li>
-                                    <li><kbd style={kbd}>Ctrl+H</kbd> <span style={{ float: 'right' }}>Global Find/Replace</span></li>
-                                    <li><kbd style={kbd}>U</kbd> <span style={{ float: 'right' }}>Undo current row</span></li>
-                                    <li><kbd style={kbd}>Ctrl+Z</kbd> <span style={{ float: 'right' }}>Global Undo</span></li>
-                                </ul>
-                                <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Sync Media</h4>
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
-                                    <li style={{ opacity: videoSrc ? 1 : 0.5 }}>
-                                        <kbd style={kbd}>[</kbd> <span style={{ float: 'right' }}>Set Time Start {!videoSrc && '(Media required)'}</span>
-                                    </li>
-                                    <li style={{ opacity: videoSrc ? 1 : 0.5 }}>
-                                        <kbd style={kbd}>]</kbd> <span style={{ float: 'right' }}>Set Time End {!videoSrc && '(Media required)'}</span>
-                                    </li>
-                                </ul>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 30 }}>
+                                <div>
+                                    <h4 style={{ margin: '0 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Navigation</h4>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                        <li><kbd style={kbd}>↑/↓</kbd> or <kbd style={kbd}>J/K</kbd>  <span style={{ float: 'right' }}>Move row</span></li>
+                                        <li><kbd style={kbd}>PgUp/Dn</kbd> <span style={{ float: 'right' }}>Jump 10 rows</span></li>
+                                        <li><kbd style={kbd}>gg</kbd> / <kbd style={kbd}>Shift+G</kbd> <span style={{ float: 'right' }}>First / Last row</span></li>
+                                    </ul>
+                                    <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Bulk Actions</h4>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                        <li><kbd style={kbd}>Space</kbd> <span style={{ float: 'right' }}>Toggle select</span></li>
+                                        <li><kbd style={kbd}>Shift+↑/↓</kbd> <span style={{ float: 'right' }}>Extend select</span></li>
+                                        <li><kbd style={kbd}>Ctrl+A</kbd> <span style={{ float: 'right' }}>Select all visible</span></li>
+                                        <li><kbd style={kbd}>Ctrl+Enter</kbd> <span style={{ float: 'right' }}>Approve selected</span></li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 style={{ margin: '0 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Editing (in Row)</h4>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                        <li><kbd style={kbd}>Enter</kbd> / <kbd style={kbd}>F2</kbd> <span style={{ float: 'right' }}>Edit active row</span></li>
+                                        <li><kbd style={kbd}>Enter</kbd> <span style={{ float: 'right' }}>Save & Next</span></li>
+                                        <li><kbd style={kbd}>Shift+Enter</kbd> <span style={{ float: 'right' }}>Save & Stay</span></li>
+                                        <li><kbd style={kbd}>Tab</kbd> <span style={{ float: 'right' }}>Save & Edit Next</span></li>
+                                        <li><kbd style={kbd}>Esc</kbd> <span style={{ float: 'right' }}>Cancel edit</span></li>
+                                    </ul>
+                                    <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Actions</h4>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                        <li><kbd style={kbd}>A</kbd> <span style={{ float: 'right' }}>Approve row</span></li>
+                                        <li><kbd style={kbd}>F</kbd> <span style={{ float: 'right' }}>Flag for review</span></li>
+                                        <li><kbd style={kbd}>R</kbd> <span style={{ float: 'right' }}>Re-translate</span></li>
+                                        <li><kbd style={kbd}>Ctrl+H</kbd> <span style={{ float: 'right' }}>Global Find/Replace</span></li>
+                                        <li><kbd style={kbd}>U</kbd> <span style={{ float: 'right' }}>Undo current row</span></li>
+                                        <li><kbd style={kbd}>Ctrl+Z</kbd> <span style={{ float: 'right' }}>Global Undo</span></li>
+                                    </ul>
+                                    <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Sync Media</h4>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                        <li style={{ opacity: videoSrc ? 1 : 0.5 }}>
+                                            <kbd style={kbd}>[</kbd> <span style={{ float: 'right' }}>Set Time Start {!videoSrc && '(Media required)'}</span>
+                                        </li>
+                                        <li style={{ opacity: videoSrc ? 1 : 0.5 }}>
+                                            <kbd style={kbd}>]</kbd> <span style={{ float: 'right' }}>Set Time End {!videoSrc && '(Media required)'}</span>
+                                        </li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {showBackToTop && (
-                <button
-                    onClick={() => listRef.current?.scrollTo(0)}
-                    style={{
-                        position: 'fixed', bottom: 30, right: 30, zIndex: 900,
-                        background: 'var(--amber)', color: '#000', border: 'none',
-                        width: 44, height: 44, borderRadius: '50%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.4)', transition: 'all 0.2s',
-                        cursor: 'pointer'
-                    }}
-                    title="Kembali ke atas"
-                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                >
-                    <ArrowUp size={22} />
-                </button>
-            )}
+            {
+                showBackToTop && (
+                    <button
+                        onClick={() => listRef.current?.scrollTo(0)}
+                        style={{
+                            position: 'fixed', bottom: 30, right: 30, zIndex: 900,
+                            background: 'var(--amber)', color: '#000', border: 'none',
+                            width: 44, height: 44, borderRadius: '50%',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.4)', transition: 'all 0.2s',
+                            cursor: 'pointer'
+                        }}
+                        title="Kembali ke atas"
+                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                        <ArrowUp size={22} />
+                    </button>
+                )
+            }
 
             {/* FLOATING BULK ACTIONS TOOLBAR */}
-            {selectedSegIds.size > 0 && (
-                <div style={{
-                    position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)',
-                    background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 8,
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.8)', padding: '12px 24px',
-                    display: 'flex', alignItems: 'center', gap: 24, zIndex: 1000,
-                    color: '#fff'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, background: 'var(--blue-dim)', color: 'var(--blue)', padding: '2px 8px', borderRadius: 4 }}>
-                            {selectedSegIds.size} Baris Terpilih
-                        </span>
-                        <button onClick={clearSelection} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
-                            Batal
-                        </button>
+            {
+                selectedSegIds.size > 0 && (
+                    <div style={{
+                        position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)',
+                        background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 8,
+                        boxShadow: '0 10px 30px rgba(0,0,0,0.8)', padding: '12px 24px',
+                        display: 'flex', alignItems: 'center', gap: 24, zIndex: 1000,
+                        color: '#fff'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, background: 'var(--blue-dim)', color: 'var(--blue)', padding: '2px 8px', borderRadius: 4 }}>
+                                {selectedSegIds.size} Baris Terpilih
+                            </span>
+                            <button onClick={clearSelection} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+                                Batal
+                            </button>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <button onClick={approveSelected} style={{ background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid currentColor', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                                <CheckSquare size={14} /> Approve Semua
+                            </button>
+                            <button onClick={skipSelected} style={{ background: 'var(--bg-2)', color: 'var(--text)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                                <XSquare size={14} /> Skip Semua
+                            </button>
+                            <button onClick={clearSelectedTranslation} style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)', border: '1px solid currentColor', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                                <Trash2 size={14} /> Kosongkan Teks
+                            </button>
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <button onClick={approveSelected} style={{ background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid currentColor', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                            <CheckSquare size={14} /> Approve Semua
-                        </button>
-                        <button onClick={skipSelected} style={{ background: 'var(--bg-2)', color: 'var(--text)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                            <XSquare size={14} /> Skip Semua
-                        </button>
-                        <button onClick={clearSelectedTranslation} style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)', border: '1px solid currentColor', padding: '6px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                            <Trash2 size={14} /> Kosongkan Teks
-                        </button>
-                    </div>
-                </div>
-            )}
+                )
+            }
 
             {showFindReplace && <FindReplaceModal onClose={() => setShowFindReplace(false)} />}
-            {flaggingId && flaggingSeg && (
-                <FlagModal segId={flaggingId} initialNote={flaggingSeg.flag_note} onClose={() => setFlaggingId(null)} />
-            )}
+            {
+                flaggingId && flaggingSeg && (
+                    <FlagModal segId={flaggingId} initialNote={flaggingSeg.flag_note} onClose={() => setFlaggingId(null)} />
+                )
+            }
 
             {/* CONTEXT MENU */}
             <Menu id="seg-menu" theme="dark" style={{
@@ -838,3 +824,77 @@ const kbd = {
     background: '#222', border: '1px solid #333', borderRadius: 4, padding: '2px 6px',
     fontFamily: 'var(--mono)', fontSize: 10, color: '#e5e7eb', boxShadow: '0 2px 0 #111'
 };
+
+const fmtTime = t => {
+    const m = Math.floor(t / 60).toString().padStart(2, '0');
+    const s = (t % 60).toFixed(1).padStart(4, '0');
+    return `00:${m}:${s}`;
+};
+
+const Viewfinder = memo(({
+    videoSrc, videoRef, waveformRef, isPlaying, setIsPlaying,
+    onTimeUpdate, handleVideoFile,
+    togglePlay, activeTranslation
+}) => {
+    const [videoTime, setVideoTime] = useState(0);
+
+    const internalTimeUpdate = () => {
+        if (!videoRef.current) return;
+        const curTime = videoRef.current.currentTime;
+        setVideoTime(curTime);
+        onTimeUpdate(curTime);
+    };
+    return (
+        <>
+            {videoSrc ? (
+                <div style={{ height: 140, background: '#000', borderRadius: 6, position: 'relative', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <video
+                        ref={videoRef}
+                        src={videoSrc}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        onTimeUpdate={internalTimeUpdate}
+                        onEnded={() => setIsPlaying(false)}
+                        autoPlay={false}
+                        controls={false}
+                    />
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 12px 10px', background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)', pointerEvents: 'none' }}>
+                        {activeTranslation && (
+                            <p style={{ margin: 0, color: '#fff', fontSize: 13, textAlign: 'center', textShadow: '0 1px 4px #000', fontFamily: 'sans-serif', whiteSpace: 'pre-wrap', lineHeight: 1.3 }}
+                                dangerouslySetInnerHTML={{ __html: activeTranslation }}
+                            />
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div style={{ height: 140, background: 'var(--bg-2)', borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', padding: 16, textAlign: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Load a video/audio file to preview sync</span>
+                    <label style={{ display: 'inline-block', background: 'var(--amber)', color: '#000', padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                        Load Media
+                        <input type="file" accept="video/*,audio/*" onChange={handleVideoFile} style={{ display: 'none' }} />
+                    </label>
+                </div>
+            )}
+
+            {videoSrc && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button onClick={togglePlay} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
+                            {isPlaying ? '⏸' : '▶'}
+                        </button>
+                        <div title="Seek Video" onClick={e => {
+                            if (!videoRef.current) return;
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const pct = (e.clientX - rect.left) / rect.width;
+                            videoRef.current.currentTime = pct * videoRef.current.duration;
+                        }} style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+                            <div style={{ height: '100%', background: 'var(--amber)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
+                        </div>
+                        <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
+                    </div>
+                    {/* Waveform Container */}
+                    <div ref={waveformRef} style={{ width: '100%', overflow: 'hidden', borderRadius: 4, background: '#111' }} />
+                </div>
+            )}
+        </>
+    );
+});

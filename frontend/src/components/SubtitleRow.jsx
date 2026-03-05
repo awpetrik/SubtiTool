@@ -1,14 +1,13 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useRef, useState, useEffect } from 'react';
 import { Flag, Check, Edit2, Eye, Wand2, Trash2 } from 'lucide-react';
 import useSubtiStore, { timecodeToSeconds } from '../store/useSubtiStore';
-import FlagModal from './FlagModal';
 import { useContextMenu } from 'react-contexify';
 
 const STATUS_CFG = {
-    pending: { label: 'Pending', color: '#64748b', bg: 'rgba(100,116,139,0.12)' },
+    pending: { label: 'Pending', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
     ai_done: { label: 'AI Done', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
     flagged: { label: 'Flagged', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
-    in_review: { label: 'In Review', color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
+    in_review: { label: 'In Review', color: '#c084fc', bg: 'rgba(192,132,252,0.12)' },
     approved: { label: 'Approved', color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
 };
 
@@ -53,7 +52,6 @@ export default memo(function SubtitleRow({ seg }) {
     const isEditing = useSubtiStore(state => state.editingId === seg.id);
     const editValue = useSubtiStore(state => state.editingId === seg.id ? state.editValue : '');
     const isSelected = useSubtiStore(state => state.selectedSegIds.has(seg.id));
-    const showFlag = useSubtiStore(state => state.flaggingId === seg.id);
     const glossary = useSubtiStore(state => state.glossary);
 
     const setActiveSegId = useSubtiStore(state => state.setActiveSegId);
@@ -63,6 +61,16 @@ export default memo(function SubtitleRow({ seg }) {
     const approve = useSubtiStore(state => state.approve);
     const setInReview = useSubtiStore(state => state.setInReview);
     const setFlaggingId = useSubtiStore(state => state.setFlaggingId);
+    const autoSaveEdit = useSubtiStore(state => state.autoSaveEdit);
+
+    // Background Autosave (Debounced) - saves every 2s of typing idle
+    useEffect(() => {
+        if (!isEditing || !editValue) return;
+        const timeout = setTimeout(() => {
+            autoSaveEdit(seg.id, editValue);
+        }, 2000);
+        return () => clearTimeout(timeout);
+    }, [editValue, isEditing, seg.id, autoSaveEdit]);
 
     const cfg = STATUS_CFG[seg.status] || STATUS_CFG.pending;
     const isSkipped = seg.status === 'skipped';
@@ -187,13 +195,13 @@ export default memo(function SubtitleRow({ seg }) {
 
                 {/* Timecode & QC Metric */}
                 <div style={{ width: 160, display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 2, flexShrink: 0 }}>
-                    <span style={{ color: '#555', fontSize: 11, whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--text-dim)', fontSize: 11, whiteSpace: 'nowrap' }}>
                         {seg.timecode_start}<br />{seg.timecode_end}
                     </span>
                     {textLen > 0 && !isSkipped && (
                         <span title={`Kecepatan baca: ${cps.toFixed(1)} karakter per detik. (Maksimal ideal: 17)`} style={{
                             fontSize: 10, fontWeight: 700,
-                            color: isCpsDanger ? 'var(--red)' : '#555',
+                            color: isCpsDanger ? 'var(--red)' : 'var(--text-muted)',
                             background: isCpsDanger ? 'rgba(239,68,68,0.1)' : 'transparent',
                             padding: isCpsDanger ? '2px 6px' : '0',
                             borderRadius: 3, width: 'fit-content'
@@ -317,7 +325,7 @@ export default memo(function SubtitleRow({ seg }) {
                         <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
                             padding: '3px 8px', borderRadius: 3, fontSize: 12,
-                            background: 'rgba(156,163,175,0.12)', color: '#9ca3af',
+                            background: 'rgba(209,213,219,0.12)', color: '#d1d5db',
                             fontWeight: 600
                         }}>
                             ♪ Skipped
@@ -370,9 +378,6 @@ export default memo(function SubtitleRow({ seg }) {
                 </div>
             </div>
 
-            {showFlag && (
-                <FlagModal segId={seg.id} initialNote={seg.flag_note} onClose={() => setFlaggingId(null)} />
-            )}
         </>
     );
 });
