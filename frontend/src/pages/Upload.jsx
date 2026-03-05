@@ -53,6 +53,14 @@ const EN_TIPS = [
     "Shortcut Shift+S can replace all lyrics/SFX candidates at once."
 ];
 
+const ID_TIPS = [
+    "Gunakan J/K untuk navigasi cepat di editor.",
+    "Tekan S untuk skip baris lirik otomatis (di editor).",
+    "Gunakan Ctrl+H untuk Find & Replace global.",
+    "Batas nyaman membaca adalah maksimal 17 CPS (Characters Per Second).",
+    "Pintasan Shift+S bisa mereplace semua kandidat lirik/SFX serentak."
+];
+
 const DICT = {
     en: {
         subtitleProcess: "AI Subtitle Workflow",
@@ -125,7 +133,7 @@ export default function UploadPage() {
     const fileRef = useRef(null);
     const [uiLang, setUiLang] = useState(localStorage.getItem('ui_lang') || 'en');
     const t = DICT[uiLang];
-    const tipsList = uiLang === 'en' ? EN_TIPS : TIPS;
+    const tipsList = uiLang === 'en' ? EN_TIPS : ID_TIPS;
 
     const [file, setFile] = useState(null);
     const [lineCount, setLineCount] = useState(0);
