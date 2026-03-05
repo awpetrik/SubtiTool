@@ -448,6 +448,10 @@ export default function EditorPage() {
         return `00:${m}:${s}`;
     };
 
+    const handleScroll = useCallback(({ scrollOffset }) => {
+        setShowBackToTop(scrollOffset > 400);
+    }, []);
+
     if (!currentProject) return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--text-muted)' }}>
             Loading project...
@@ -655,9 +659,7 @@ export default function EditorPage() {
                         segments={segments}
                         filterStatus={filterStatus}
                         listRef={listRef}
-                        onScroll={useCallback(({ scrollOffset }) => {
-                            setShowBackToTop(scrollOffset > 400);
-                        }, [])}
+                        onScroll={handleScroll}
                     />
                 </main>
             </div>
