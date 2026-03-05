@@ -3,9 +3,13 @@
 > **⚠️ WARNING: WORK IN PROGRESS**  
 > SubtiTool is currently in active early-stage development. It is **not fully functional yet** and you may encounter bugs, incomplete features, or breaking changes. Use at your own risk!
 
+
+
 <div align="center">
   <img width="1423" height="799" alt="image" src="https://github.com/user-attachments/assets/b4eb51df-3fff-48c7-a8a4-8038af5e35c3" />
 </div>
+
+
 
 An AI-powered subtitle translator and keyboard-centric editor designed to streamline localization workflows. Built for professional subtitlers who need speed, context-awareness, and reliability.
 
