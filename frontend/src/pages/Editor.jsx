@@ -153,16 +153,26 @@ export default function EditorPage() {
 
     useEffect(() => {
         if (videoSrc && waveformRef.current) {
-            wavesurferRef.current = WaveSurfer.create({
+            const isProxy = videoSrc.includes('_proxy.mp4');
+
+            const wsOptions = {
                 container: waveformRef.current,
                 waveColor: 'rgba(245,158,11,0.3)',
                 progressColor: 'var(--amber)',
                 height: 40,
                 barWidth: 2,
                 normalize: true,
-                backend: 'MediaElement', // Attempt to hint avoiding web-audio full-file decoding for massive files
                 media: videoRef.current
-            });
+            };
+
+            // Jika sedang memakai video proxy, WebAudio decoding API bakal crash di browser ('Error code: 5') 
+            // karena video 480p proxy masih terlalu berat bagi RAM untuk diekstrak jadi Float32Array
+            // Solusi: Kita minta WaveSurfer memuat MP3 16kbps 8kHz super ringan spesifik OOM bypass dari backend
+            if (isProxy) {
+                wsOptions.url = videoSrc.replace('_proxy.mp4', '_proxy_audio.mp3');
+            }
+
+            wavesurferRef.current = WaveSurfer.create(wsOptions);
             return () => wavesurferRef.current.destroy();
         }
     }, [videoSrc]);

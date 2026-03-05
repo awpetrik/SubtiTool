@@ -26,9 +26,13 @@ async def process_video(task_id: str, input_path: Path, output_path: Path):
     try:
         conversion_tasks[task_id]["status"] = "converting"
         
-        # ffmpeg command
+        audio_output_path = TEMP_DIR / f"{task_id}_proxy_audio.mp3"
+        
+        # ffmpeg command with multi-output!
         cmd = [
             "ffmpeg", "-i", str(input_path),
+            
+            # Output 1: The Proxy Video
             "-vcodec", "libx264",
             "-vf", "scale=-2:480",
             "-b:v", "800k",
@@ -36,7 +40,15 @@ async def process_video(task_id: str, input_path: Path, output_path: Path):
             "-b:a", "128k",
             "-preset", "ultrafast",
             "-movflags", "+faststart",
-            "-y", str(output_path)
+            "-y", str(output_path),
+            
+            # Output 2: The Ultra-Lightweight Audio for WaveSurfer JSON bypassing OOM
+            "-vn", 
+            "-acodec", "libmp3lame",
+            "-ar", "8000",
+            "-ac", "1",
+            "-b:a", "16k",
+            "-y", str(audio_output_path)
         ]
         
         process = await asyncio.create_subprocess_exec(
