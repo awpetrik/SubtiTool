@@ -5,9 +5,9 @@ import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
 import { HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp, Trash2, CheckSquare, XSquare, Wand2 } from 'lucide-react';
-import SubtiToolLogo from '../components/SubtiToolLogo';
 import SubSourceModal from '../components/SubSourceModal';
 import FindReplaceModal from '../components/FindReplaceModal';
+import { ProjectToolbar } from '../components/ProjectToolbar';
 import WaveSurfer from 'wavesurfer.js';
 import { Menu, Item, Separator } from 'react-contexify';
 import 'react-contexify/dist/ReactContexify.css';
@@ -483,6 +483,9 @@ export default function EditorPage() {
                             <div style={{ width: `${(stats.flagged / stats.total) * 100}%`, background: '#ef4444', transition: 'width 0.3s' }} />
                         </div>
                     </div>
+
+                    <ProjectToolbar />
+
                     <button
                         onClick={async () => {
                             const res = await fetch(`${API}/api/projects/${id}/export`);
