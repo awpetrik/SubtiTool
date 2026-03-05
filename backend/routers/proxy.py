@@ -1,5 +1,7 @@
 import os
 import uuid
+import asyncio
+import re
 import ffmpeg
 from fastapi import APIRouter, File, UploadFile, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
@@ -10,54 +12,102 @@ router = APIRouter(prefix="/api/proxy", tags=["proxy"])
 TEMP_DIR = Path("temp_proxies")
 TEMP_DIR.mkdir(exist_ok=True)
 
+conversion_tasks = {}
+
 def cleanup_file(filepath: Path):
     if filepath.exists():
-        os.remove(filepath)
+        try:
+            os.remove(filepath)
+        except:
+            pass
+
+def get_duration(filepath: str):
+    try:
+        probe = ffmpeg.probe(filepath)
+        return float(probe['format']['duration'])
+    except:
+        return 0
+
+async def process_video(task_id: str, input_path: Path, output_path: Path):
+    try:
+        duration = get_duration(str(input_path))
+        conversion_tasks[task_id]["status"] = "converting"
+        
+        # ffmpeg command
+        cmd = [
+            "ffmpeg", "-i", str(input_path),
+            "-vcodec", "libx264",
+            "-vf", "scale=-2:480",
+            "-video_bitrate", "800k",
+            "-acodec", "aac",
+            "-audio_bitrate", "128k",
+            "-preset", "ultrafast",
+            "-movflags", "+faststart",
+            "-y", str(output_path)
+        ]
+        
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stderr=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE
+        )
+        
+        time_regex = re.compile(r"time=(\d+):(\d+):(\d+.\d+)")
+        
+        while True:
+            line = await process.stderr.readline()
+            if not line:
+                break
+            line_str = line.decode("utf-8", errors="replace")
+            match = time_regex.search(line_str)
+            if match and duration > 0:
+                h, m, s = match.groups()
+                current_time = int(h) * 3600 + int(m) * 60 + float(s)
+                progress = min(99, int((current_time / duration) * 100))
+                conversion_tasks[task_id]["progress"] = progress
+
+        await process.wait()
+        
+        if process.returncode == 0:
+            conversion_tasks[task_id]["status"] = "done"
+            conversion_tasks[task_id]["progress"] = 100
+        else:
+            conversion_tasks[task_id]["status"] = "error"
+            conversion_tasks[task_id]["error"] = "FFmpeg process failed."
+            
+    except Exception as e:
+        conversion_tasks[task_id]["status"] = "error"
+        conversion_tasks[task_id]["error"] = str(e)
+    finally:
+        cleanup_file(input_path)
 
 @router.post("/convert")
-async def convert_to_proxy(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def start_proxy_conversion(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     if not file.filename:
         return JSONResponse(status_code=400, content={"error": "File tidak valid."})
         
     ext = Path(file.filename).suffix
-    unique_id = str(uuid.uuid4())
-    input_path = TEMP_DIR / f"{unique_id}_raw{ext}"
-    output_path = TEMP_DIR / f"{unique_id}_proxy.mp4"
+    task_id = str(uuid.uuid4())
+    input_path = TEMP_DIR / f"{task_id}_raw{ext}"
+    output_path = TEMP_DIR / f"{task_id}_proxy.mp4"
     
-    # Simpan file upload ke disk
+    conversion_tasks[task_id] = {
+        "status": "uploading",
+        "progress": 0,
+        "filename": file.filename
+    }
+    
+    # Save the chunk to disk
     with open(input_path, "wb") as buffer:
-        buffer.write(await file.read())
+        while content := await file.read(1024 * 1024):  # 1MB chunks
+            buffer.write(content)
         
-    try:
-        # Eksekusi FFmpeg: downscale ke 480p, bitrate rendah, optimasi untuk web streaming cepat
-        stream = ffmpeg.input(str(input_path))
-        stream = ffmpeg.output(
-            stream, 
-            str(output_path),
-            vcodec='libx264',
-            vf='scale=-2:480',  # Lebar otomatis, tinggi 480p
-            video_bitrate='800k',
-            acodec='aac',
-            audio_bitrate='128k',
-            preset='ultrafast',
-            movflags='+faststart' # Biar video lgsg main sebelum donlot selesai semua
-        )
-        ffmpeg.run(stream, overwrite_output=True, quiet=True)
-    except ffmpeg.Error as e:
-        cleanup_file(input_path)
-        cleanup_file(output_path)
-        return JSONResponse(status_code=500, content={"error": f"Gagal convert video: {str(e)}"})
-        
-    # File ori udah ga dibutuhin, lgsg hapus buat hemat memori cloud
-    cleanup_file(input_path)
+    background_tasks.add_task(process_video, task_id, input_path, output_path)
     
-    # Jadwalkan hapus hasil proxy saat request kelar 
-    # (Idealnya pake cron/job lain klo proxy mo disimpan lama, 
-    # tp untuk on-the-fly streaming sementara gini gpp)
-    background_tasks.add_task(cleanup_file, output_path)
-    
-    return FileResponse(
-        path=output_path, 
-        media_type="video/mp4",
-        filename=f"proxy_720p.mp4"
-    )
+    return {"task_id": task_id}
+
+@router.get("/status/{task_id}")
+async def get_status(task_id: str):
+    if task_id not in conversion_tasks:
+        return JSONResponse(status_code=404, content={"error": "Task not found"})
+    return conversion_tasks[task_id]

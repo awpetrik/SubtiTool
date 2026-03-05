@@ -437,6 +437,7 @@ export default function EditorPage() {
     };
 
     const [isConvertingProxy, setIsConvertingProxy] = useState(false);
+    const [convertStatus, setConvertStatus] = useState(null);
 
     const handleVideoFile = async (e) => {
         const file = e.target.files[0];
@@ -450,26 +451,67 @@ export default function EditorPage() {
 
             if (wantsProxy) {
                 setIsConvertingProxy(true);
+                setConvertStatus({ status: "uploading", progress: 0 });
                 const formData = new FormData();
                 formData.append('file', file);
 
                 try {
-                    const res = await fetch(`${API}/api/proxy/convert`, {
-                        method: 'POST',
-                        body: formData
+                    const taskId = await new Promise((resolve, reject) => {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', `${API}/api/proxy/convert`);
+                        xhr.upload.onprogress = (event) => {
+                            if (event.lengthComputable) {
+                                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                                setConvertStatus({ status: "uploading", progress: percentComplete });
+                            }
+                        };
+                        xhr.onload = () => {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                const res = JSON.parse(xhr.responseText);
+                                resolve(res.task_id);
+                            } else {
+                                reject(new Error("Gagal upload video"));
+                            }
+                        };
+                        xhr.onerror = () => reject(new Error("Network Error saat upload"));
+                        xhr.send(formData);
                     });
 
-                    if (!res.ok) throw new Error("Gagal convert proxy");
+                    // Polling status konversi
+                    setConvertStatus({ status: "converting", progress: 0 });
 
-                    const blob = await res.blob();
-                    const proxyUrl = URL.createObjectURL(blob);
-                    setVideoSrc(proxyUrl);
+                    const checkStatus = async () => {
+                        try {
+                            const res = await fetch(`${API}/api/proxy/status/${taskId}`);
+                            const data = await res.json();
+
+                            if (data.status === 'converting') {
+                                setConvertStatus({ status: "converting", progress: data.progress });
+                                setTimeout(checkStatus, 1500); // poll delay
+                            } else if (data.status === 'done') {
+                                setConvertStatus(null);
+                                setIsConvertingProxy(false);
+                                setVideoSrc(`${API}/temp_proxies/${taskId}_proxy.mp4`);
+                            } else if (data.status === 'error') {
+                                throw new Error(data.error || "Gagal convert di server");
+                            }
+                        } catch (err) {
+                            console.error(err);
+                            alert("Aduh, backend gagal konversi otomatis: " + err.message);
+                            setConvertStatus(null);
+                            setIsConvertingProxy(false);
+                            setVideoSrc(URL.createObjectURL(file));
+                        }
+                    };
+
+                    checkStatus();
+
                 } catch (err) {
                     console.error(err);
                     alert("Aduh, gagal convert proxy otomatis. Kita coba load aslinya aja ya...");
-                    setVideoSrc(URL.createObjectURL(file));
-                } finally {
+                    setConvertStatus(null);
                     setIsConvertingProxy(false);
+                    setVideoSrc(URL.createObjectURL(file));
                 }
                 return;
             }
@@ -601,6 +643,7 @@ export default function EditorPage() {
                             onTimeUpdate={handleVideoTimeUpdate}
                             handleVideoFile={handleVideoFile}
                             isConvertingProxy={isConvertingProxy}
+                            convertStatus={convertStatus}
                             togglePlay={togglePlay}
                             activeTranslation={activeSegment?.translation}
                         />
@@ -875,7 +918,7 @@ const fmtTime = t => {
 
 const Viewfinder = memo(({
     videoSrc, videoRef, waveformRef, isPlaying, setIsPlaying,
-    onTimeUpdate, handleVideoFile, isConvertingProxy,
+    onTimeUpdate, handleVideoFile, isConvertingProxy, convertStatus,
     togglePlay, activeTranslation
 }) => {
     const [videoTime, setVideoTime] = useState(0);
@@ -914,10 +957,21 @@ const Viewfinder = memo(({
             ) : (
                 <div style={{ height: 140, background: 'var(--bg-2)', borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', padding: 16, textAlign: 'center', gap: 10 }}>
                     {isConvertingProxy ? (
-                        <>
-                            <div style={{ display: 'inline-block', width: 24, height: 24, border: '3px solid var(--amber)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                            <span style={{ fontSize: 11, color: 'var(--amber)' }}>Sedang mengecilkan resolusi video... (Tunggu sebentar)</span>
-                        </>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%', padding: '0 40px' }}>
+                            <div style={{ fontSize: 13, color: 'var(--amber)', fontWeight: 600 }}>
+                                {convertStatus?.status === 'uploading' ? 'Mengunggah file...' : 'Mengonversi (Proxy 480p)...'}
+                                {convertStatus?.progress}%
+                            </div>
+                            <div style={{ width: '100%', height: 6, background: 'var(--bg-1)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{
+                                    height: '100%',
+                                    background: 'var(--amber)',
+                                    width: `${convertStatus?.progress || 0}%`,
+                                    transition: 'width 0.3s linear'
+                                }} />
+                            </div>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Proses ini berjalan di latar belakang. Anda bisa bekerja fitur lain.</span>
+                        </div>
                     ) : (
                         <>
                             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Load a video/audio file to preview sync</span>
