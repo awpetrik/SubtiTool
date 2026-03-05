@@ -476,7 +476,7 @@ export default function EditorPage() {
                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{stats.total > 0 ? Math.round((stats.approved / (stats.total - Math.max(0, stats.skipped || 0))) * 100) : 0}% approved</span>
                         <div
                             title={`Approved: ${stats.approved}\nAI Done: ${stats.ai_done}\nSkipped: ${stats.skipped}\nFlagged: ${stats.flagged}\nIn Review: ${stats.in_review}\nPending: ${stats.pending}`}
-                            style={{ display: 'flex', width: 220, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'help' }}>
+                            style={{ display: 'flex', width: 140, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'help' }}>
                             <div style={{ width: `${(stats.approved / stats.total) * 100}%`, background: '#10b981', transition: 'width 0.3s' }} />
                             <div style={{ width: `${(stats.ai_done / stats.total) * 100}%`, background: '#f59e0b', transition: 'width 0.3s' }} />
                             <div style={{ width: `${(stats.skipped / stats.total) * 100}%`, background: '#9ca3af', transition: 'width 0.3s' }} />
