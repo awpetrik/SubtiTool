@@ -38,9 +38,9 @@ async def process_video(task_id: str, input_path: Path, output_path: Path):
             "ffmpeg", "-i", str(input_path),
             "-vcodec", "libx264",
             "-vf", "scale=-2:480",
-            "-video_bitrate", "800k",
+            "-b:v", "800k",
             "-acodec", "aac",
-            "-audio_bitrate", "128k",
+            "-b:a", "128k",
             "-preset", "ultrafast",
             "-movflags", "+faststart",
             "-y", str(output_path)
@@ -54,11 +54,14 @@ async def process_video(task_id: str, input_path: Path, output_path: Path):
         
         time_regex = re.compile(r"time=(\d+):(\d+):(\d+.\d+)")
         
+        ffmpeg_log = []
+        
         while True:
             line = await process.stderr.readline()
             if not line:
                 break
             line_str = line.decode("utf-8", errors="replace")
+            ffmpeg_log.append(line_str)
             match = time_regex.search(line_str)
             if match and duration > 0:
                 h, m, s = match.groups()
@@ -73,7 +76,9 @@ async def process_video(task_id: str, input_path: Path, output_path: Path):
             conversion_tasks[task_id]["progress"] = 100
         else:
             conversion_tasks[task_id]["status"] = "error"
-            conversion_tasks[task_id]["error"] = "FFmpeg process failed."
+            # Return last few lines of the error for context
+            error_details = "".join(ffmpeg_log[-5:]).strip()
+            conversion_tasks[task_id]["error"] = f"FFmpeg error: {error_details}"
             
     except Exception as e:
         conversion_tasks[task_id]["status"] = "error"
