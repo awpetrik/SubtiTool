@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, memo } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import useSubtiStore from '../store/useSubtiStore';
