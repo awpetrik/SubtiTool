@@ -20,6 +20,14 @@ export const timecodeToSeconds = (tc) => {
   return h * 3600 + m * 60 + s + (ms ? Number(ms) / 1000 : 0);
 };
 
+export const secondsToTimecode = (seconds) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+};
+
 const API = 'http://localhost:8000';
 
 // Retry dengan exponential backoff — max 3 attempts, start 500ms
@@ -339,6 +347,24 @@ const useSubtiStore = create((set, get) => ({
       const updated = await res.json();
       set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
     }
+  },
+
+  updateTimecode: async (segId, type, seconds) => {
+    const { currentProject, prepareUndo } = get();
+    if (!currentProject) return;
+    const tc = secondsToTimecode(seconds);
+    prepareUndo(segId);
+    try {
+      const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(type === 'start' ? { timecode_in: tc } : { timecode_out: tc }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+      }
+    } catch { /* silent */ }
   },
 
   translateSnippet: async (text) => {

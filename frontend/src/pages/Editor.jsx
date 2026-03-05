@@ -189,6 +189,7 @@ export default function EditorPage() {
                 editingId, startEdit, toggleSelection, selectAllVisible,
                 clearSelection, undoAction, approveSelected, approve,
                 retranslate, setFlaggingId, skipRow, bulkSkipCandidates,
+                updateTimecode,
             } = useSubtiStore.getState();
 
             // If we are editing or inside any input, let local events handle it
@@ -251,6 +252,16 @@ export default function EditorPage() {
                     case 'Enter':
                     case 'F2':
                         if (activeSegment) startEdit(activeSegment);
+                        break;
+                    case '[':
+                        if (videoRef.current && activeSegId) {
+                            updateTimecode(activeSegId, 'start', videoRef.current.currentTime);
+                        }
+                        break;
+                    case ']':
+                        if (videoRef.current && activeSegId) {
+                            updateTimecode(activeSegId, 'end', videoRef.current.currentTime);
+                        }
                         break;
                     case 'a':
                     case 'A':
@@ -716,6 +727,15 @@ export default function EditorPage() {
                                     <li><kbd style={kbd}>Ctrl+H</kbd> <span style={{ float: 'right' }}>Global Find/Replace</span></li>
                                     <li><kbd style={kbd}>U</kbd> <span style={{ float: 'right' }}>Undo current row</span></li>
                                     <li><kbd style={kbd}>Ctrl+Z</kbd> <span style={{ float: 'right' }}>Global Undo</span></li>
+                                </ul>
+                                <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Sync Media</h4>
+                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                    <li style={{ opacity: videoSrc ? 1 : 0.5 }}>
+                                        <kbd style={kbd}>[</kbd> <span style={{ float: 'right' }}>Set Time Start {!videoSrc && '(Media required)'}</span>
+                                    </li>
+                                    <li style={{ opacity: videoSrc ? 1 : 0.5 }}>
+                                        <kbd style={kbd}>]</kbd> <span style={{ float: 'right' }}>Set Time End {!videoSrc && '(Media required)'}</span>
+                                    </li>
                                 </ul>
                             </div>
                         </div>
