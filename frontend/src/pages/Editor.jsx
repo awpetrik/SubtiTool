@@ -7,6 +7,7 @@ import GlossaryPanel from '../components/GlossaryPanel';
 import { HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp, Trash2, CheckSquare, XSquare, Wand2 } from 'lucide-react';
 import SubtiToolLogo from '../components/SubtiToolLogo';
 import SubSourceModal from '../components/SubSourceModal';
+import FlagModal from '../components/FlagModal';
 import FindReplaceModal from '../components/FindReplaceModal';
 import { ProjectToolbar } from '../components/ProjectToolbar';
 import WaveSurfer from 'wavesurfer.js';
@@ -100,6 +101,7 @@ export default function EditorPage() {
         loadProject, getStats,
         selectedSegIds, approveSelected, clearSelectedTranslation, skipSelected, clearSelection,
         isSaving, lastSaved,
+        flaggingId, setFlaggingId,
     } = useSubtiStore(useShallow(state => ({
         currentProject: state.currentProject,
         segments: state.segments,
@@ -119,6 +121,8 @@ export default function EditorPage() {
         clearSelection: state.clearSelection,
         isSaving: state.isSaving,
         lastSaved: state.lastSaved,
+        flaggingId: state.flaggingId,
+        setFlaggingId: state.setFlaggingId,
     })));
 
     const [showSubSource, setShowSubSource] = useState(false);
@@ -163,6 +167,7 @@ export default function EditorPage() {
     const pctApproved = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0;
     const activeSegment = activeSegId ? segments.find(s => s.id === activeSegId) : null;
     const activeIndex = filtered.findIndex(s => s.id === activeSegId);
+    const flaggingSeg = flaggingId ? segments.find(s => s.id === flaggingId) : null;
 
     // Auto-scroll active row into view via virtual list
     useEffect(() => {
@@ -769,6 +774,9 @@ export default function EditorPage() {
             )}
 
             {showFindReplace && <FindReplaceModal onClose={() => setShowFindReplace(false)} />}
+            {flaggingId && flaggingSeg && (
+                <FlagModal segId={flaggingId} initialNote={flaggingSeg.flag_note} onClose={() => setFlaggingId(null)} />
+            )}
 
             {/* CONTEXT MENU */}
             <Menu id="seg-menu" theme="dark" style={{
