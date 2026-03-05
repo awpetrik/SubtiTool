@@ -17,6 +17,15 @@ import { VariableSizeList } from 'react-window';
 
 const API = 'http://localhost:8000';
 
+const timecodeToSeconds = (tc) => {
+    if (!tc) return 0;
+    const [hms, ms] = tc.replace(',', '.').split(/[.,]/);
+    if (!hms) return 0;
+    const parts = hms.split(':').map(Number);
+    const h = parts[0] || 0, m = parts[1] || 0, s = parts[2] || 0;
+    return h * 3600 + m * 60 + s + (ms ? Number(ms) / 1000 : 0);
+};
+
 const STATUS_CFG = {
     pending: { label: 'Pending', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', dot: '#94a3b8' },
     ai_done: { label: 'AI Done', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', dot: '#f59e0b' },
@@ -386,14 +395,7 @@ export default function EditorPage() {
         }
     };
 
-    const timecodeToSeconds = (tc) => {
-        if (!tc) return 0;
-        const [hms, ms] = tc.replace(',', '.').split(/[.,]/);
-        if (!hms) return 0;
-        const parts = hms.split(':').map(Number);
-        const h = parts[0] || 0, m = parts[1] || 0, s = parts[2] || 0;
-        return h * 3600 + m * 60 + s + (ms ? Number(ms) / 1000 : 0);
-    };
+
 
     // Keep refs of current state for the setInterval
     const activeSegRef = useRef(null);
@@ -406,8 +408,8 @@ export default function EditorPage() {
 
     // Jump video to start of segment when active segment changes
     useEffect(() => {
-        if (activeSegment && !isPlaying) {
-            setVideoTime(timecodeToSeconds(activeSegment.timecode_start));
+        if (activeSegment && !isPlaying && videoRef.current) {
+            videoRef.current.currentTime = timecodeToSeconds(activeSegment.timecode_start);
         }
     }, [activeSegId, activeSegment]);
 
