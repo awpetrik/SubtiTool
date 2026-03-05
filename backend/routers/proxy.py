@@ -45,11 +45,11 @@ async def process_video(task_id: str, input_path: Path, output_path: Path):
             "-movflags", "+faststart",
             "-y", str(output_path)
         ]
-        
         process = await asyncio.create_subprocess_exec(
             *cmd,
-            stderr=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE
         )
         
         time_regex = re.compile(r"time=(\d+):(\d+):(\d+.\d+)")
