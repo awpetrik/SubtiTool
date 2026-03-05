@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    Hexagon, Edit3, Zap, Sparkles, Lock,
+    Edit3, Zap, Sparkles, Lock,
     XCircle, CheckCircle2, FileText, AlertTriangle,
     Circle, Loader2, RotateCcw, ArrowRight, UploadCloud,
     Settings2, Globe, PenTool, Terminal, ChevronRight, Music, VolumeX, Lightbulb,
     FolderOpen, Trash2, Play, Clock, Plus, ChevronDown
 } from 'lucide-react';
+import SubtiToolLogo from '../components/SubtiToolLogo';
 
 const API = 'http://localhost:8000';
 
@@ -470,7 +471,7 @@ export default function UploadPage() {
                 {/* Header: brand */}
                 <div className="upload-left-header">
                     <div style={{ fontSize: 22, color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <Hexagon size={20} fill="currentColor" /> SubtiTool
+                        <SubtiToolLogo size={24} /> SubtiTool
                     </div>
                     <p style={{ color: '#3f3f46', margin: '3px 0 0', fontSize: 11 }}>{t.subtitleProcess}</p>
                 </div>

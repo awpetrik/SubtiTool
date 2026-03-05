@@ -4,7 +4,8 @@ import { useShallow } from 'zustand/react/shallow';
 import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
-import { Hexagon, HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp, Trash2, CheckSquare, XSquare, Wand2 } from 'lucide-react';
+import { HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp, Trash2, CheckSquare, XSquare, Wand2 } from 'lucide-react';
+import SubtiToolLogo from '../components/SubtiToolLogo';
 import SubSourceModal from '../components/SubSourceModal';
 import FindReplaceModal from '../components/FindReplaceModal';
 import WaveSurfer from 'wavesurfer.js';
@@ -35,15 +36,30 @@ const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRe
 
     const getSize = useCallback((index) => {
         const seg = filtered[index];
-        if (!seg) return ROW_HEIGHT_NORMAL;
-        return editingId === seg.id ? ROW_HEIGHT_EDITING : ROW_HEIGHT_NORMAL;
+        if (!seg) return 76;
+
+        if (editingId === seg.id) return 160;
+
+        const originalText = seg.original || "";
+        const translationText = seg.translation || "";
+        const longestText = originalText.length > translationText.length ? originalText : translationText;
+
+        // Est. lines from actual breaks
+        const linesBreak = longestText.split('\n').length;
+        // Est. wraps (narrow columns ~50-60 char/line)
+        const estWraps = Math.ceil(longestText.length / 55);
+        const lineCount = Math.max(linesBreak, estWraps);
+
+        // Base (padding/meta) + (lines * line-height)
+        return Math.max(76, 38 + (lineCount * 22) + 12);
     }, [filtered, editingId]);
 
-    // Reset size cache when editingId changes so VariableSizeList recalculates
+    // Reset cache on edit or filter change
     useEffect(() => {
-        sizeMap.current = {};
-        if (listRef?.current) listRef.current.resetAfterIndex(0, false);
-    }, [editingId, filtered.length]);
+        if (listRef?.current) {
+            listRef.current.resetAfterIndex(0, true);
+        }
+    }, [editingId, filtered]);
 
     if (filtered.length === 0) {
         return (
@@ -417,7 +433,7 @@ export default function EditorPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 16 }}>←</button>
                     <span style={{ fontSize: 16, color: 'var(--amber)', fontWeight: 800, fontFamily: 'var(--display)', letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Hexagon size={16} fill="currentColor" /> SubtiTool
+                        <SubtiToolLogo size={18} /> SubtiTool
                     </span>
                     <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{currentProject.title}</span>
                     <span style={{ fontSize: 11, background: 'var(--amber-dim)', color: 'var(--amber)', padding: '2px 8px', borderRadius: 3, border: '1px solid var(--amber-border)' }}>
@@ -630,12 +646,12 @@ export default function EditorPage() {
                         borderBottom: '1px solid var(--border)', fontSize: 10, letterSpacing: 1,
                         color: 'var(--text-muted)', background: 'var(--bg)', zIndex: 10, flexShrink: 0,
                     }}>
-                        <span style={{ width: 36 }}>#</span>
-                        <span style={{ width: 160 }}>TIMECODE</span>
-                        <span style={{ flex: 1 }}>ORIGINAL</span>
-                        <span style={{ flex: 1 }}>TERJEMAHAN</span>
-                        <span style={{ width: 100 }}>STATUS</span>
-                        <span style={{ width: 116 }}>AKSI</span>
+                        <span style={{ width: 36, flexShrink: 0 }}>#</span>
+                        <span style={{ width: 160, flexShrink: 0 }}>TIMECODE</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>ORIGINAL</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>TERJEMAHAN</span>
+                        <span style={{ width: 100, flexShrink: 0 }}>STATUS</span>
+                        <span style={{ width: 116, flexShrink: 0 }}>AKSI</span>
                     </div>
 
                     <SubtitleList segments={segments} filterStatus={filterStatus} listRef={listRef} />
