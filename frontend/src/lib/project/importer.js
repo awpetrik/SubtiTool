@@ -43,7 +43,7 @@ export async function parseAndValidateProject(file) {
 
                 for (let i = 0; i < data.rows.length; i++) {
                     const r = data.rows[i];
-                    if (!r.id || !r.timecode_in || !r.timecode_out || typeof r.original !== 'string') {
+                    if (r.id == null || !r.timecode_in || !r.timecode_out || typeof r.original !== 'string') {
                         throw new Error(`Row index ${i} is missing required fields (id, timecode_in, timecode_out, original).`);
                     }
                     if (!VALID_STATUSES.includes(r.status)) {
