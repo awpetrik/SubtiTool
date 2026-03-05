@@ -31,7 +31,7 @@ const FILTERS = ['all', 'ai_done', 'flagged', 'in_review', 'approved', 'skipped'
 const ROW_HEIGHT_NORMAL = 76;
 const ROW_HEIGHT_EDITING = 148;
 
-const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRef }) {
+const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRef, onScroll }) {
     const filtered = filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
     const editingId = useSubtiStore(state => state.editingId);
     const sizeMap = useRef({});
@@ -79,6 +79,7 @@ const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRe
             itemSize={getSize}
             width="100%"
             overscanCount={8}
+            onScroll={onScroll}
             style={{ outline: 'none' }}
         >
             {({ index, style }) => (
@@ -674,7 +675,12 @@ export default function EditorPage() {
                         <span style={{ width: 116, flexShrink: 0 }}>AKSI</span>
                     </div>
 
-                    <SubtitleList segments={segments} filterStatus={filterStatus} listRef={listRef} />
+                    <SubtitleList
+                        segments={segments}
+                        filterStatus={filterStatus}
+                        listRef={listRef}
+                        onScroll={({ scrollOffset }) => setShowBackToTop(scrollOffset > 400)}
+                    />
                 </main>
             </div>
 
@@ -745,7 +751,7 @@ export default function EditorPage() {
 
             {showBackToTop && (
                 <button
-                    onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                    onClick={() => listRef.current?.scrollTo(0)}
                     style={{
                         position: 'fixed', bottom: 30, right: 30, zIndex: 900,
                         background: 'var(--amber)', color: '#000', border: 'none',

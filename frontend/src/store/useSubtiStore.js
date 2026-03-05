@@ -354,6 +354,7 @@ const useSubtiStore = create((set, get) => ({
     if (!currentProject) return;
     const tc = secondsToTimecode(seconds);
     prepareUndo(segId);
+    set({ isSaving: true });
     try {
       const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
         method: 'PATCH',
@@ -362,9 +363,13 @@ const useSubtiStore = create((set, get) => ({
       });
       if (res.ok) {
         const updated = await res.json();
-        set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+        set({ segments: get().segments.map(s => s.id === segId ? updated : s), isSaving: false, lastSaved: new Date() });
+      } else {
+        set({ isSaving: false });
       }
-    } catch { /* silent */ }
+    } catch {
+      set({ isSaving: false });
+    }
   },
 
   translateSnippet: async (text) => {
