@@ -80,7 +80,13 @@ const useSubtiStore = create((set, get) => ({
 
   // Actions
   setFilter: (f) => set({ filterStatus: f }),
-  setActiveSegId: (id) => set({ activeSegId: id }),
+  setActiveSegId: (id) => {
+    const { currentProject } = get();
+    if (currentProject) {
+      localStorage.setItem(`last_seg_${currentProject.id}`, id);
+    }
+    set({ activeSegId: id });
+  },
   setFlaggingId: (id) => set({ flaggingId: id }),
   setSidePanel: (p) => set({ sidePanel: p }),
 
@@ -490,9 +496,14 @@ const useSubtiStore = create((set, get) => ({
     const res = await fetch(`${API}/api/projects/${projectId}`);
     if (res.ok) {
       const data = await res.json();
+      const lastSegId = localStorage.getItem(`last_seg_${projectId}`);
+      const initialSegId = (lastSegId && data.segments.some(s => s.id === parseInt(lastSegId)))
+        ? parseInt(lastSegId)
+        : (data.segments.length > 0 ? data.segments[0].id : null);
+
       set({
         currentProject: data.project, segments: data.segments, glossary: data.glossary,
-        activeSegId: data.segments.length > 0 ? data.segments[0].id : null,
+        activeSegId: initialSegId,
         selectedSegIds: new Set(), undoStack: []
       });
     }
