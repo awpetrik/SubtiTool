@@ -122,6 +122,23 @@ SubtiTool is a specialized environment for subtitle translation that bridges the
 
 ---
 
+## Project Portability (.stproj)
+
+SubtiTool uses a custom `.stproj` format (JSON-based) to ensure your internal project state—including translation status, flags, and glossary entries—is fully portable across different installations or backups.
+
+### The .stproj Schema
+Unlike standard `.srt` files which only contain timecodes and text, an `.stproj` file encapsulates:
+
+- **Project Metadata**: Title, source/target languages, and creation timestamps.
+- **Glossary**: All project-specific terminology and translation notes.
+- **Extended Row Data**: Current translation status (`ai_done`, `flagged`, etc.), CPA/CPS calculations, and review flags.
+- **Session State**: Your last active row, currently applied filters, and bookmarked segments.
+
+### Why use .stproj?
+While `.srt` is the final export format for players, `.stproj` should be used for **saving work-in-progress**. It allows you to move your project to another computer or restore it after a database reset without losing your organizational progress.
+
+---
+
 ## Keyboard Shortcuts
 
 Press `?` inside the editor for the full interactive shortcut reference.
