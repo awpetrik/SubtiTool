@@ -18,6 +18,7 @@ An AI-powered subtitle translation and localization platform designed for profes
   - [Translation Workflow](#translation-workflow)
   - [Editor Controls](#editor-controls)
   - [AI-Assisted Refinement](#ai-assisted-refinement)
+- [Project Portability (.stproj)](#project-portability-stproj)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Media Handling](#media-handling)
 - [Project Structure](#project-structure)
