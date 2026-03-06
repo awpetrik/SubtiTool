@@ -27,6 +27,7 @@ An AI-powered subtitle translation and localization platform designed for profes
 - [Project Portability (.stproj)](#project-portability-stproj)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Media Handling](#media-handling)
+- [API Reference](#api-reference)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
 - [License](#license)
@@ -169,6 +170,28 @@ SubtiTool generates specialized 480p H.264 video proxies for smooth playback dur
 - Large video files will prompt a conversion request.
 - Proxy files are stored in `backend/temp_proxies` and served as static assets.
 - Cleaning the cache can be done manually or will occur according to server-side retention policies.
+
+---
+
+## API Reference
+
+SubtiTool provides a RESTful API for project management and background translation coordination.
+
+### Projects
+- **GET** `/api/projects`: List all saved projects with completion statistics.
+- **POST** `/api/projects`: Create a manual project entry (non-translation).
+- **GET** `/api/projects/{id}`: Retrieve full project details, including all segments and glossary.
+- **PATCH** `/api/projects/{id}/segments/{seg_id}`: Update a specific segment's translation, status, or flag notes.
+- **DELETE** `/api/projects/{id}`: Permanently remove a project and all associated data.
+
+### Translation & Jobs
+- **POST** `/api/translate`: Initiate a background translation job. Requires `multipart/form-data` including the `.srt` file and project metadata.
+- **GET** `/api/translate/{project_id}/progress`: A Server-Sent Events (SSE) endpoint to stream real-time progress updates for ongoing jobs.
+- **POST** `/api/translate/{project_id}/refine`: AI-powered snippet refinement for selected text (Shorten/Rephrase).
+- **POST** `/api/translate/{project_id}/retranslate/{seg_id}`: Trigger an engine retranslation for a single segment.
+
+### Export
+- **POST** `/api/export/{project_id}`: Generate and download the finished subtitle file. Supports SRT format with optional original/translation layout.
 
 ---
 
