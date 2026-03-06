@@ -232,8 +232,8 @@ export default function EditorPage() {
     }, [segments, filterStatus]);
 
     const pctApproved = stats.total > 0 ? Math.round((stats.approved / stats.total) * 100) : 0;
-    const activeSegment = activeSegId ? segments.find(s => s.id === activeSegId) : null;
-    const activeIndex = filtered.findIndex(s => s.id === activeSegId);
+    const activeSegment = activeSegId ? segments.find(s => s.id == activeSegId) : null;
+    const activeIndex = filtered.findIndex(s => s.id == activeSegId);
 
     // Pre-calculate numerical seconds for all segments to avoid parsing during high-frequency playback events
     const timeCache = useMemo(() => {
@@ -247,7 +247,7 @@ export default function EditorPage() {
     const timeCacheRef = useRef([]);
     useEffect(() => { timeCacheRef.current = timeCache; }, [timeCache]);
 
-    const flaggingSeg = flaggingId ? segments.find(s => s.id === flaggingId) : null;
+    const flaggingSeg = flaggingId ? segments.find(s => s.id == flaggingId) : null;
 
     const initialScrollRef = useRef(false);
 
@@ -256,8 +256,13 @@ export default function EditorPage() {
         if (activeIndex >= 0 && listRef.current) {
             // Force scroll on initial mount once data is ready
             if (!initialScrollRef.current) {
-                listRef.current.scrollToItem(activeIndex, 'center');
                 initialScrollRef.current = true;
+                // Give react-window a moment to "settle" and calculate item sizes
+                setTimeout(() => {
+                    if (listRef.current) {
+                        listRef.current.scrollToItem(activeIndex, 'center');
+                    }
+                }, 100);
                 return;
             }
 
