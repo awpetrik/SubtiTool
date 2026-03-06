@@ -14,7 +14,6 @@
     "@ffmpeg/util": "^0.12.2",
     "lucide-react": "^0.577.0",
     "react": "^19.2.0",
-    "react-contexify": "^6.0.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
     "react-text-selection-popover": "^2.0.2",

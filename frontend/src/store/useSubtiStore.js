@@ -374,6 +374,22 @@ const useSubtiStore = create((set, get) => ({
     }
   },
 
+  unflag: async (segId) => {
+    const { currentProject, prepareUndo } = get();
+    prepareUndo(segId);
+    try {
+      const res = await fetchWithRetry(`${API}/api/projects/${currentProject.id}/segments/${segId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'pending', flag_note: '' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+      }
+    } catch { /* silent */ }
+  },
+
   updateTimecode: async (segId, type, seconds) => {
     const { currentProject, prepareUndo } = get();
     if (!currentProject) return;
@@ -419,16 +435,54 @@ const useSubtiStore = create((set, get) => ({
   },
 
   retranslate: async (segId) => {
-    const { currentProject, segments, prepareUndo } = get();
+    const { currentProject, prepareUndo } = get();
     prepareUndo(segId);
+    const geminiKey = localStorage.getItem('gemini_key') || '';
     const res = await fetch(`${API}/api/translate/${currentProject.id}/segment/${segId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ gemini_api_key: geminiKey }),
     });
     if (res.ok) {
       const updated = await res.json();
-      set({ segments: get().segments.map(s => s.id === segId ? updated : s) });
+      // Estimate token usage: roughly (chars / 4)
+      const estTokens = Math.ceil(((updated.original?.length || 0) + (updated.translation?.length || 0)) / 4) + 100; // +100 base
+      set({
+        segments: get().segments.map(s => s.id === segId ? updated : s),
+        tokenUsage: (get().tokenUsage || 0) + estTokens
+      });
+      return { success: true };
+    }
+    const errData = await res.json().catch(() => ({}));
+    return { success: false, error: errData.detail || "Error AI Translation" };
+  },
+
+  refineSnippet: async (selectedText, fullOriginal, action) => {
+    const { currentProject } = get();
+    if (!currentProject) return { success: false, error: "Project tidak ditemukan" };
+    const geminiKey = localStorage.getItem('gemini_key') || '';
+    try {
+      const res = await fetch(`${API}/api/translate/${currentProject.id}/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selected_text: selectedText,
+          full_original: fullOriginal,
+          action,
+          gemini_api_key: geminiKey
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const estTokens = Math.ceil((selectedText.length + data.result?.length || 0) / 4) + 50;
+        set({ tokenUsage: (get().tokenUsage || 0) + estTokens });
+        return { success: true, translation: data.result };
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        return { success: false, error: errorData.detail || `Server error (${res.status})` };
+      }
+    } catch (err) {
+      return { success: false, error: "Koneksi terputus. Pastikan internet Anda aktif lalu coba lagi." };
     }
   },
 

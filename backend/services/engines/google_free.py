@@ -52,6 +52,6 @@ class GoogleFreeEngine(TranslateEngine):
                     time.sleep(delay)
                     delay *= 2
                 else:
-                    logger.error(f"GoogleFree gagal setelah {MAX_RETRIES} retry: {e}")
-                    # Fallback: kembalikan teks asli daripada crash seluruh batch
-                    return line
+                    err_msg = f"GoogleFree gagal setelah {MAX_RETRIES} retry: {e}"
+                    logger.error(err_msg)
+                    raise ValueError(err_msg)

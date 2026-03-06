@@ -320,11 +320,33 @@ async def retranslate_segment(
         "char_context": project.char_context,
         "lang_from": project.lang_from, "lang_to": project.lang_to,
     }
+    
+    # Ambil 5 baris sebelum dan sesudah untuk context hinting agar terjemahan luwes
+    surrounding_segs = db.query(Segment).filter(
+        Segment.project_id == project_id,
+        Segment.index >= seg.index - 3,
+        Segment.index <= seg.index + 3,
+        Segment.id != seg.id,
+    ).order_by(Segment.index).all()
+    surr_text = "\\n".join(s.original for s in surrounding_segs if s.original.strip())
+    
     if payload.translation_hint:
-        context["hint"] = payload.translation_hint
+        context["hint"] = payload.translation_hint + f"\\n\\n[Surrounding Reference (from {project.lang_from}): {surr_text}]"
+    else:
+        context["hint"] = f"[Surrounding Reference (from {project.lang_from}): {surr_text}]"
 
     try:
-        engine = _get_engine(project.engine, payload.gemini_api_key)
+        engine_name = project.engine
+        
+        # Upgrade to Gemini automatically if key is provided (Contextual Pro feature)
+        if payload.gemini_api_key:
+            engine_name = "gemini"
+        elif engine_name == "manual":
+            # Fallback for manual project without key
+            engine_name = "google_free"
+            
+        engine = _get_engine(engine_name, payload.gemini_api_key)
+        # Hack override prompt via hint if contextual translation is active
         result = await engine.translate_batch([seg.original], context, glossary)
         seg.translation = result[0] if result else seg.translation
         seg.status = "ai_done"
@@ -367,3 +389,72 @@ async def translate_text_snippet(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail="Gagal terhubung ke layanan terjemahan. Pastikan internet aktif!")
+
+
+class RefineRequest(BaseModel):
+    selected_text: str
+    full_original: str
+    action: str  # 'shorten' or 'rephrase'
+    gemini_api_key: Optional[str] = None
+
+
+@router.post("/{project_id}/refine")
+async def refine_snippet(
+    project_id: int,
+    payload: RefineRequest,
+    db: Session = Depends(get_db)
+):
+    # Error fallback Google Free: Karena shortening/rephrasing pakai Google Free Translate biasa 
+    # sangat buruk (hanya translate word-by-word), kita beritahu user bahwa fitur Pro ini butuh Gemini.
+    if not payload.gemini_api_key:
+        raise HTTPException(
+            status_code=400, 
+            detail="Fitur '✂️ Shorten' & '✨ Rephrase' khusus didesain untuk AI. Masukkan API Key Gemini Anda di pojok kanan atas untuk membukanya."
+        )
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project tidak ditemukan")
+
+    action_prompt = f"Significantly shorten the localization text to meet strict Netflix CPS (Characters Per Second) limits without reducing its core meaning. The output MUST stay in {project.lang_to}."
+    if payload.action == "rephrase":
+        action_prompt = f"Rephrase the localization text to be much more natural, idiomatic, and fluid based on the genre. Eliminate robotic translations. The output MUST stay in {project.lang_to}."
+
+    prompt = f"""You are an elite subtitle localization editor working on a high-end production.
+Project Guidance:
+- Target Language: {project.lang_to}
+- Genre/Theme: {project.genre}
+- Key Character Dynamics: {project.char_context}
+
+Original Full Line (for context):
+"{payload.full_original}"
+
+The localized text piece you need to fix:
+"{payload.selected_text}"
+
+Task: {action_prompt} 
+(Output ONLY the raw repaired {project.lang_to} text. No Markdown block, no preamble, DO NOT wrap with quotes, DO NOT explain)."""
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=payload.gemini_api_key)
+        
+        # Use native async for much faster response and less blocking
+        if hasattr(client, "aio"):
+            response = await client.aio.models.generate_content(
+                model="gemini-3-flash-preview", contents=prompt
+            )
+        else:
+            # Fallback legacy sdk
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, lambda: client.models.generate_content(
+                    model="gemini-3-flash-preview", contents=prompt
+                )
+            )
+        return {"result": response.text.strip().strip('"').strip("'")}
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "api key" in err_msg or "invalid" in err_msg:
+            raise HTTPException(status_code=400, detail="Gemini API Key Anda tidak aktif/invalid.")
+        raise HTTPException(status_code=500, detail=f"AI sedang sibuk, harap coba lagi. Error: {str(e)}")
