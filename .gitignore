@@ -49,3 +49,11 @@ logs/
 
 # Docker
 docker-compose.override.yml
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+temp_*/
+*~

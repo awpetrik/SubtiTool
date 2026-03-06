@@ -110,10 +110,25 @@ export default memo(function SubtitleRow({ seg }) {
 
     // Store selection here so right-click doesn't lose it
     const selectionRef = useRef({ text: '', range: null });
+    const textareaRef = useRef(null);
+    const caretRef = useRef({ start: null, end: null });
+
+    const updateCaret = (ta) => {
+        if (!ta) return;
+        caretRef.current = {
+            start: ta.selectionStart,
+            end: ta.selectionEnd,
+        };
+    };
 
     const captureSelection = (ta) => {
+        if (!ta) return;
         const start = ta.selectionStart;
         const end = ta.selectionEnd;
+
+        // Always keep latest caret position (even when tidak ada highlight)
+        updateCaret(ta);
+
         if (start !== end) {
             selectionRef.current = {
                 text: ta.value.substring(start, end),
@@ -142,6 +157,39 @@ export default memo(function SubtitleRow({ seg }) {
             }
         });
     };
+
+    // Debug caret position vs text changes (tanpa memaksa posisi, supaya tidak mengganggu browser)
+    useEffect(() => {
+        if (!isEditing || !textareaRef.current) return;
+        const ta = textareaRef.current;
+
+        // #region agent log
+        fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Debug-Session-Id': '175f2f',
+            },
+            body: JSON.stringify({
+                sessionId: '175f2f',
+                runId: 'initial',
+                hypothesisId: 'H5',
+                location: 'frontend/src/components/SubtitleRow.jsx:caretEffect',
+                message: 'Textarea rendered with caret position',
+                data: {
+                    segId: seg.id,
+                    valueLength: (editValue || '').length,
+                    selectionStart: ta.selectionStart,
+                    selectionEnd: ta.selectionEnd,
+                    storedStart: caretRef.current.start,
+                    storedEnd: caretRef.current.end,
+                    isFocused: document.activeElement === ta,
+                },
+                timestamp: Date.now(),
+            }),
+        }).catch(() => { });
+        // #endregion agent log
+    }, [editValue, isEditing, seg.id]);
 
     return (
         <>
@@ -226,9 +274,13 @@ export default memo(function SubtitleRow({ seg }) {
                 <div style={{ flex: 1, minWidth: 0 }} onDoubleClick={() => startEdit(seg)}>
                     {isEditing ? (
                         <textarea
+                            ref={textareaRef}
                             autoFocus
-                            value={editValue}
-                            onChange={e => useSubtiStore.setState({ editValue: e.target.value })}
+                            defaultValue={editValue}
+                            onChange={e => {
+                                updateCaret(e.target);
+                                useSubtiStore.setState({ editValue: e.target.value });
+                            }}
                             onMouseUp={e => captureSelection(e.target)}
                             onSelect={e => captureSelection(e.target)}
                             onBlur={() => saveEdit(seg.id)}

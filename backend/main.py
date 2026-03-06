@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
@@ -12,7 +13,11 @@ from routers import projects, glossary, translate, export, proxy
 
 Base.metadata.create_all(bind=engine)
 
+os.makedirs("temp_proxies", exist_ok=True)
+
 app = FastAPI(title="SubtiTool API", version="1.0.0")
+
+app.mount("/temp_proxies", StaticFiles(directory="temp_proxies"), name="proxies")
 
 app.add_middleware(
     CORSMiddleware,

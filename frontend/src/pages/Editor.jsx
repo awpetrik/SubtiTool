@@ -178,6 +178,7 @@ export default function EditorPage() {
     }, [videoSrc]);
 
     const [showBackToTop, setShowBackToTop] = useState(false);
+    const [followPlayback, setFollowPlayback] = useState(true);
     const mainRef = useRef(null);
     const listRef = useRef(null);
 
@@ -232,10 +233,35 @@ export default function EditorPage() {
 
     // Auto-scroll active row into view via virtual list
     useEffect(() => {
+        if (!followPlayback) return;
         if (activeIndex >= 0 && listRef.current) {
             listRef.current.scrollToItem(activeIndex, 'smart');
+
+            // #region agent log
+            fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Debug-Session-Id': '175f2f',
+                },
+                body: JSON.stringify({
+                    sessionId: '175f2f',
+                    runId: 'initial',
+                    hypothesisId: 'H3',
+                    location: 'frontend/src/pages/Editor.jsx:autoScrollEffect',
+                    message: 'Auto-scroll effect triggered',
+                    data: {
+                        activeSegId,
+                        activeIndex,
+                        hasListRef: !!listRef.current,
+                        followPlayback,
+                    },
+                    timestamp: Date.now(),
+                }),
+            }).catch(() => { });
+            // #endregion agent log
         }
-    }, [activeSegId]);
+    }, [activeSegId, activeIndex, followPlayback]);
 
     // Handle global keyboard shortcuts
     useEffect(() => {
@@ -449,6 +475,32 @@ export default function EditorPage() {
 
             const isEditing = useSubtiStore.getState().editingId !== null;
             if (currentSeg && currentSeg.id !== activeSegRef.current?.id && !isEditing) {
+                // #region agent log
+                fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Debug-Session-Id': '175f2f',
+                    },
+                    body: JSON.stringify({
+                        sessionId: '175f2f',
+                        runId: 'initial',
+                        hypothesisId: 'H2',
+                        location: 'frontend/src/pages/Editor.jsx:handleVideoTimeUpdate',
+                        message: 'Setting active segment from video time',
+                        data: {
+                            curTime,
+                            segId: currentSeg.id,
+                            start: currentSeg.start,
+                            end: currentSeg.end,
+                            prevActiveId: activeSegRef.current?.id ?? null,
+                            isEditing,
+                        },
+                        timestamp: Date.now(),
+                    }),
+                }).catch(() => { });
+                // #endregion agent log
+
                 useSubtiStore.getState().setActiveSegId(currentSeg.id);
             }
         }
@@ -578,9 +630,39 @@ export default function EditorPage() {
         return `00:${m}:${s}`;
     };
 
-    const handleScroll = useCallback(({ scrollOffset }) => {
+    const handleScroll = useCallback(({ scrollOffset, scrollDirection, scrollUpdateWasRequested }) => {
         setShowBackToTop(scrollOffset > 400);
-    }, []);
+
+        // Jika user scroll manual saat video sedang jalan, hormati kontrol user:
+        // auto-follow dimatikan sementara, bisa diaktifkan lagi via toggle.
+        if (!scrollUpdateWasRequested && isPlaying && followPlayback) {
+            // #region agent log
+            fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Debug-Session-Id': '175f2f',
+                },
+                body: JSON.stringify({
+                    sessionId: '175f2f',
+                    runId: 'initial',
+                    hypothesisId: 'H4',
+                    location: 'frontend/src/pages/Editor.jsx:handleScroll',
+                    message: 'User scrolled manually while playing, disabling followPlayback',
+                    data: {
+                        scrollOffset,
+                        scrollDirection,
+                        scrollUpdateWasRequested,
+                        isPlaying,
+                    },
+                    timestamp: Date.now(),
+                }),
+            }).catch(() => { });
+            // #endregion agent log
+
+            setFollowPlayback(false);
+        }
+    }, [isPlaying, followPlayback]);
 
     if (!currentProject) return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--text-muted)' }}>
@@ -698,6 +780,30 @@ export default function EditorPage() {
                             togglePlay={togglePlay}
                             activeTranslation={activeSegment?.translation}
                         />
+                        {/* Playback-follow toggle: default ON, akan otomatis OFF jika user scroll manual saat video jalan */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 0.5 }}>
+                                Auto-follow editor ke video
+                            </span>
+                            <button
+                                onClick={() => setFollowPlayback(v => !v)}
+                                style={{
+                                    borderRadius: 999, border: '1px solid var(--border)', padding: '2px 8px',
+                                    fontSize: 10, display: 'flex', alignItems: 'center', gap: 6,
+                                    background: followPlayback ? 'var(--amber-dim)' : 'var(--bg-2)',
+                                    color: followPlayback ? 'var(--amber)' : 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        width: 8, height: 8, borderRadius: '50%',
+                                        background: followPlayback ? 'var(--amber)' : 'var(--border)',
+                                    }}
+                                />
+                                {followPlayback ? 'ON (Ikuti video)' : 'OFF (Kontrol manual)'}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Filter pills */}
@@ -978,6 +1084,28 @@ const Viewfinder = memo(({
         if (!videoRef.current) return;
         const curTime = videoRef.current.currentTime;
         setVideoTime(curTime);
+        // #region agent log
+        fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Debug-Session-Id': '175f2f',
+            },
+            body: JSON.stringify({
+                sessionId: '175f2f',
+                runId: 'initial',
+                hypothesisId: 'H1',
+                location: 'frontend/src/pages/Editor.jsx:internalTimeUpdate',
+                message: 'Video timeupdate fired',
+                data: {
+                    curTime,
+                    isPlaying,
+                    hasVideoRef: !!videoRef.current,
+                },
+                timestamp: Date.now(),
+            }),
+        }).catch(() => { });
+        // #endregion agent log
         onTimeUpdate(curTime);
     };
     return (
@@ -989,6 +1117,8 @@ const Viewfinder = memo(({
                         src={videoSrc}
                         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                         onTimeUpdate={internalTimeUpdate}
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
                         onEnded={() => setIsPlaying(false)}
                         autoPlay={false}
                         controls={false}

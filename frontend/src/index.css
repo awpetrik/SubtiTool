@@ -14,9 +14,9 @@
   --blue-dim: rgba(59, 130, 246, 0.12);
   --yellow: #f59e0b;
   --slate: #64748b;
-  --text: #e0e0e0;
-  --text-dim: #888;
-  --text-muted: #555;
+  --text: #f0f0f0;
+  --text-dim: #a3a3a3;
+  --text-muted: #737373;
   --mono: 'IBM Plex Mono', 'Fira Code', monospace;
   --display: 'Syne', sans-serif;
 }

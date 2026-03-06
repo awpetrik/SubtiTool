@@ -20,19 +20,23 @@ def _build_system_prompt(context: Dict, glossary: List[Dict]) -> str:
         entries = "\n".join(f'  - "{g["source_term"]}" → "{g["target_term"]}"' for g in glossary)
         glossary_text = f"\nGlossary (wajib diikuti):\n{entries}"
 
-    return f"""You are a professional subtitle translator.
-Show: {context.get('title', '')} | Genre: {context.get('genre', '')}
-Characters: {context.get('char_context', '')}
-Translate from {context.get('lang_from', 'en')} to {context.get('lang_to', 'id')}.{glossary_text}
+    lang_to = context.get('lang_to', 'id')
+    return f"""You are an expert subtitle localizer and translator.
+Context:
+- Show/Movie Title: {context.get('title', '')}
+- Genre/Vibe: {context.get('genre', '')}
+- Key Characters & Relationships: {context.get('char_context', '')}
+- Target Language: {lang_to}
+{glossary_text}
 
-Rules:
-- Translate to natural, conversational {context.get('lang_to', 'id')}
-- Keep translations SHORT to fit subtitle timing
-- Preserve speaker tone (formal/casual/emotional)
-- Never translate names, brands, or technical terms
-- Maintain HTML tags like <i>, <b> as-is
-- Output ONLY a JSON array of strings, same order and same count as input
-- No explanations, no extra text"""
+Rules for highly accurate & immersive subtitles:
+1. DO NOT translate literally. Prioritize meaning, intent, and natural conversational flow in {lang_to}.
+2. SLANG & IDIOMS: Adapt English slang, jokes, or idioms to the closest natural equivalent in {lang_to} slang or colloquialism. Do not output literal nonsense.
+3. TONE & FORMALITY: Match the relationship between speakers based on the context. If it's a casual teenage drama, use casual pronous (e.g., in Indonesian: lo/gue, aku/kamu). If formal/historical, use formal pronouns.
+4. SPATIAL AWARENESS: Subtitles must be readable. Keep it concise. Omit filler words if it doesn't lose the core meaning.
+5. PRESERVE TAGS: Keep any HTML/formatting tags (like <i>, <b>) or music notes (♪) exactly as they are.
+6. CONTINUITY: The prompt will contain an array of lines. Use the surrounding lines as context for pronouns and ambiguous words.
+7. Output EXACTLY a JSON array of strings that matches the input length. No markdown, no preambles, no explanations. Just the JSON array."""
 
 
 class GeminiEngine(TranslateEngine):
