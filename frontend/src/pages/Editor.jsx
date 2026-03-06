@@ -4,15 +4,13 @@ import { useShallow } from 'zustand/react/shallow';
 import useSubtiStore from '../store/useSubtiStore';
 import SubtitleRow from '../components/SubtitleRow';
 import GlossaryPanel from '../components/GlossaryPanel';
-import { HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp, Trash2, CheckSquare, XSquare, Wand2 } from 'lucide-react';
+import { HelpCircle, X, BookOpen, BarChart2, Filter, ArrowUp, Trash2, CheckSquare, XSquare, Wand2, Target, ArrowLeftToLine, ArrowRightToLine, Activity, SkipBack, SkipForward } from 'lucide-react';
 import SubtiToolLogo from '../components/SubtiToolLogo';
 import SubSourceModal from '../components/SubSourceModal';
 import FlagModal from '../components/FlagModal';
 import FindReplaceModal from '../components/FindReplaceModal';
 import { ProjectToolbar } from '../components/ProjectToolbar';
 import WaveSurfer from 'wavesurfer.js';
-import { Menu, Item, Separator } from 'react-contexify';
-import 'react-contexify/dist/ReactContexify.css';
 import { VariableSizeList } from 'react-window';
 
 const API = 'http://localhost:8001';
@@ -40,6 +38,16 @@ const FILTERS = ['all', 'ai_done', 'flagged', 'in_review', 'approved', 'skipped'
 const ROW_HEIGHT_NORMAL = 76;
 const ROW_HEIGHT_EDITING = 148;
 
+const SubtitleRowRenderer = memo(({ index, style, data }) => {
+    const seg = data[index];
+    if (!seg) return null;
+    return (
+        <div style={style}>
+            <SubtitleRow seg={seg} />
+        </div>
+    );
+});
+
 const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRef, onScroll }) {
     const filtered = filterStatus === 'all' ? segments : segments.filter(s => s.status === filterStatus);
     const editingId = useSubtiStore(state => state.editingId);
@@ -62,7 +70,12 @@ const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRe
         const lineCount = Math.max(linesBreak, estWraps);
 
         // Base (padding/meta) + (lines * line-height)
-        return Math.max(76, 38 + (lineCount * 22) + 12);
+        const baseHeight = Math.max(76, 38 + (lineCount * 22) + 12);
+
+        // Add breathing room at the very end
+        if (index === filtered.length - 1) return baseHeight + 200;
+
+        return baseHeight;
     }, [filtered, editingId]);
 
     // Reset cache on edit or filter change
@@ -72,6 +85,13 @@ const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRe
         }
     }, [editingId, filtered]);
 
+    const [listHeight, setListHeight] = useState(window.innerHeight - 52 - 41);
+    useEffect(() => {
+        const handleResize = () => setListHeight(window.innerHeight - 52 - 41);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     if (filtered.length === 0) {
         return (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', padding: 40 }}>
@@ -80,29 +100,20 @@ const SubtitleList = memo(function SubtitleList({ segments, filterStatus, listRe
         );
     }
 
-    const [listHeight, setListHeight] = useState(window.innerHeight - 52 - 41);
-    useEffect(() => {
-        const handleResize = () => setListHeight(window.innerHeight - 52 - 41);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
     return (
         <VariableSizeList
             ref={listRef}
             height={listHeight}
             itemCount={filtered.length}
             itemSize={getSize}
+            itemData={filtered}
+            itemKey={(index, data) => data[index]?.id || index}
             width="100%"
             overscanCount={8}
             onScroll={onScroll}
             style={{ outline: 'none' }}
         >
-            {({ index, style }) => (
-                <div style={style}>
-                    <SubtitleRow seg={filtered[index]} />
-                </div>
-            )}
+            {SubtitleRowRenderer}
         </VariableSizeList>
     );
 });
@@ -140,6 +151,7 @@ export default function EditorPage() {
         lastSaved: state.lastSaved,
         flaggingId: state.flaggingId,
         setFlaggingId: state.setFlaggingId,
+        tokenUsage: state.tokenUsage || 0,
     })));
 
     const [showSubSource, setShowSubSource] = useState(false);
@@ -188,16 +200,22 @@ export default function EditorPage() {
         if (id) {
             const savedProxyUrl = localStorage.getItem(`project_proxy_${id}`);
             if (savedProxyUrl) {
-                // Verify if the proxy file still exists on the server to prevent dead links
+                // Optimistic load: set the source immediately so it appears on refresh
+                setVideoSrc(savedProxyUrl);
+
+                // Background check: silently verify if it's still on the server
                 fetch(savedProxyUrl, { method: 'HEAD' })
                     .then(res => {
-                        if (res.ok && !videoSrc) {
-                            setVideoSrc(savedProxyUrl);
-                        } else if (!res.ok) {
+                        if (res.status === 404) {
+                            // Only if we're sure it's gone, clear it
                             localStorage.removeItem(`project_proxy_${id}`);
+                            // If it matches what we just loaded, unset it
+                            setVideoSrc(prev => prev === savedProxyUrl ? null : prev);
                         }
                     })
-                    .catch(() => { });
+                    .catch(() => {
+                        // Network error? Don't unset, the server might just be starting up
+                    });
             }
         }
     }, [id]);
@@ -235,7 +253,7 @@ export default function EditorPage() {
     useEffect(() => {
         if (!followPlayback) return;
         if (activeIndex >= 0 && listRef.current) {
-            listRef.current.scrollToItem(activeIndex, 'smart');
+            listRef.current.scrollToItem(activeIndex, 'center');
 
             // #region agent log
             fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
@@ -366,6 +384,10 @@ export default function EditorPage() {
                     case 'F':
                         if (activeSegId) setFlaggingId(activeSegId);
                         break;
+                    case 'x':
+                    case 'X':
+                        if (activeSegId) toggleSelection(activeSegId);
+                        break;
                     case 'n':
                     case 'N': {
                         let i = currIdx + 1;
@@ -396,7 +418,7 @@ export default function EditorPage() {
                         }
                         break;
                     case ' ':
-                        if (activeSegId) toggleSelection(activeSegId);
+                        togglePlay();
                         break;
                     case 'Escape':
                         clearSelection();
@@ -411,46 +433,6 @@ export default function EditorPage() {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [activeSegId, filtered, activeIndex]);
-
-    const handleContextItemClick = async ({ id: actionId, props }) => {
-        const { textSelection, range, seg, editValueSnapshot } = props;
-        if (!textSelection || !range || editValueSnapshot === null) {
-            // If no selection or not in editing mode at time of right-click
-            alert('Pilih teks dulu di dalam kolom terjemahan saat sedang dalam mode edit (double-click baris terlebih dahulu).');
-            return;
-        }
-
-        if (actionId === 'translate') {
-            const res = await useSubtiStore.getState().translateSnippet(textSelection);
-            if (res.success && res.translation) {
-                // Use the snapshot taken at right-click time, not stale editValue
-                const newText =
-                    editValueSnapshot.substring(0, range.start) +
-                    res.translation +
-                    editValueSnapshot.substring(range.end);
-                // Patch directly to API and re-open editing with new text
-                await useSubtiStore.getState().saveEditWithValue(seg.id, newText);
-                // Re-open editing so user can continue
-                const updatedSeg = useSubtiStore.getState().segments.find(s => s.id === seg.id);
-                if (updatedSeg) {
-                    useSubtiStore.getState().startEdit({ ...updatedSeg, translation: newText });
-                }
-            } else {
-                alert('Gagal: ' + (res.error || 'Terjadi kesalahan tidak dikenal.'));
-            }
-        } else if (actionId === 'clear') {
-            const newText =
-                editValueSnapshot.substring(0, range.start) +
-                editValueSnapshot.substring(range.end);
-            await useSubtiStore.getState().saveEditWithValue(seg.id, newText);
-            const updatedSeg = useSubtiStore.getState().segments.find(s => s.id === seg.id);
-            if (updatedSeg) {
-                useSubtiStore.getState().startEdit({ ...updatedSeg, translation: newText });
-            }
-        }
-    };
-
-
 
     // Keep refs of current state for the setInterval
     const activeSegRef = useRef(null);
@@ -617,7 +599,16 @@ export default function EditorPage() {
                     setVideoSrc(URL.createObjectURL(file));
                 }
                 return;
+            } else {
+                // User cancelled. Check if we have a stale-but-usable proxy URL for this ID anyway
+                const staleProxy = localStorage.getItem(`project_proxy_${id}`);
+                if (staleProxy) {
+                    setVideoSrc(staleProxy);
+                } else {
+                    setVideoSrc(URL.createObjectURL(file));
+                }
             }
+            return;
         }
 
         // Default (Tolak konversi / file ringan)
@@ -674,99 +665,138 @@ export default function EditorPage() {
         <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
             {/* ── HEADER ── */}
             <header style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '0 20px', height: 52, borderBottom: '1px solid var(--border)',
-                position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 100,
+                height: 44, borderBottom: '1px solid var(--border)', background: 'var(--bg-1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0,
+                zIndex: 10
             }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 16 }}>←</button>
-                    <span style={{ fontSize: 16, color: 'var(--amber)', fontWeight: 800, fontFamily: 'var(--display)', letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <SubtiToolLogo size={18} /> SubtiTool
-                    </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{currentProject.title}</span>
-                    <span style={{ fontSize: 11, background: 'var(--amber-dim)', color: 'var(--amber)', padding: '2px 8px', borderRadius: 3, border: '1px solid var(--amber-border)' }}>
-                        {currentProject.lang_from?.toUpperCase()} → {currentProject.lang_to?.toUpperCase()}
-                    </span>
-                    {/* Auto-save indicator */}
-                    <span style={{
-                        fontSize: 11, display: 'flex', alignItems: 'center', gap: 5,
-                        color: isSaving ? 'var(--amber)' : lastSaved ? '#10b981' : 'transparent',
-                        transition: 'color 0.4s',
-                    }}>
-                        {isSaving ? (
-                            <>
-                                <span style={{
-                                    display: 'inline-block', width: 8, height: 8,
-                                    border: '1.5px solid var(--amber)', borderTopColor: 'transparent',
-                                    borderRadius: '50%', animation: 'spin 0.7s linear infinite',
-                                }} />
-                                Menyimpan...
-                            </>
-                        ) : lastSaved ? (
-                            <>
-                                <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-                                    <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                                Tersimpan
-                            </>
-                        ) : null}
-                    </span>
-                </div>
+                {/* Left: Project Identity & Breadcrumb path */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    {/* Progress */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        {activeSegId && (
-                            <span style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 700, background: 'var(--amber-dim)', padding: '2px 8px', borderRadius: 4 }}>
-                                Row {Math.max(0, activeIndex) + 1} of {filtered.length}
+                    <div
+                        onClick={() => navigate('/')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'transform 0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                        <SubtiToolLogo size={20} color="#fff" />
+                        <span style={{ fontSize: 16, color: 'var(--amber)', fontWeight: 800, fontFamily: 'var(--display)', letterSpacing: -0.5 }}>SubtiTool</span>
+                    </div>
+
+                    <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600 }}>{currentProject.title}</span>
+                        <span style={{ fontSize: 10, background: 'var(--bg-2)', color: 'var(--text-muted)', padding: '1px 6px', borderRadius: 3, border: '1px solid var(--border)', fontWeight: 600 }}>
+                            {currentProject.lang_from?.toUpperCase()} → {currentProject.lang_to?.toUpperCase()}
+                        </span>
+                    </div>
+
+                    {/* Auto-save Status tucked next to metadata */}
+                    <div style={{
+                        marginLeft: 8, paddingLeft: 12, borderLeft: '1px solid var(--border)',
+                        height: 14, display: 'flex', alignItems: 'center'
+                    }}>
+                        <span style={{
+                            fontSize: 10, display: 'flex', alignItems: 'center', gap: 5,
+                            color: isSaving ? 'var(--amber)' : lastSaved ? '#10b981' : 'transparent',
+                            transition: 'color 0.4s', fontWeight: 600
+                        }}>
+                            {isSaving ? (
+                                <span style={{ display: 'inline-block', width: 6, height: 6, border: '1.2px solid var(--amber)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                            ) : (
+                                <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#10b981' }} />
+                            )}
+                            {isSaving ? 'SYNCING...' : 'SAVED'}
+                        </span>
+                    </div>
+                </div>
+
+                <div style={{ flex: 1 }} />
+
+                {/* Right: Global Utilities */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <button onClick={() => setShowShortcuts(true)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }} title="Shortcuts">
+                        <HelpCircle size={16} />
+                    </button>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(45deg, var(--bg-3), var(--bg-1))', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: 'var(--amber)' }}>
+                        R
+                    </div>
+                </div>
+            </header>
+
+            {/* Sub-header / Toolbar - Focus on Actions & Health */}
+            <div style={{
+                height: 42, borderBottom: '1px solid var(--border)', background: 'rgba(9, 9, 11, 0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0,
+                backdropFilter: 'blur(8px)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <ProjectToolbar />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+                    {/* Position Counter */}
+                    {activeSegId && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: 1 }}>INDEX</span>
+                            <span style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 800, fontFamily: 'var(--mono)' }}>
+                                {Math.max(0, activeIndex) + 1} <span style={{ color: 'rgba(255,255,255,0.1)', fontWeight: 400 }}>/</span> {filtered.length}
                             </span>
-                        )}
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{stats.total > 0 ? Math.round((stats.approved / (stats.total - Math.max(0, stats.skipped || 0))) * 100) : 0}% approved</span>
+                        </div>
+                    )}
+
+                    {/* Progress Bar */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: 1 }}>COMPLETION</span>
                         <div
                             title={`Approved: ${stats.approved}\nAI Done: ${stats.ai_done}\nSkipped: ${stats.skipped}\nFlagged: ${stats.flagged}\nIn Review: ${stats.in_review}\nPending: ${stats.pending}`}
-                            style={{ display: 'flex', width: 140, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'help' }}>
+                            style={{ display: 'flex', width: 140, height: 4, background: 'var(--bg-2)', borderRadius: 2, overflow: 'hidden', cursor: 'help' }}>
                             <div style={{ width: `${(stats.approved / stats.total) * 100}%`, background: '#10b981', transition: 'width 0.3s' }} />
                             <div style={{ width: `${(stats.ai_done / stats.total) * 100}%`, background: '#f59e0b', transition: 'width 0.3s' }} />
                             <div style={{ width: `${(stats.skipped / stats.total) * 100}%`, background: '#9ca3af', transition: 'width 0.3s' }} />
                             <div style={{ width: `${(stats.in_review / stats.total) * 100}%`, background: '#8b5cf6', transition: 'width 0.3s' }} />
                             <div style={{ width: `${(stats.flagged / stats.total) * 100}%`, background: '#ef4444', transition: 'width 0.3s' }} />
                         </div>
+                        <span style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 800 }}>
+                            {stats.total > 0 ? Math.round((stats.approved / (stats.total - Math.max(0, stats.skipped || 0))) * 100) : 0}%
+                        </span>
                     </div>
 
-                    <ProjectToolbar />
+                    <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
 
-                    <button
-                        onClick={async () => {
-                            const res = await fetch(`${API}/api/projects/${id}/export`);
-                            const blob = await res.blob();
-                            const safeTitle = (currentProject?.title || 'subtitle').replace(/[^a-zA-Z0-9 _-]/g, '_').trim();
-                            const filename = `${safeTitle}_${currentProject?.lang_to || 'id'}.srt`;
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url; a.download = filename;
-                            document.body.appendChild(a); a.click();
-                            document.body.removeChild(a); URL.revokeObjectURL(url);
-                        }}
-                        style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-dim)', padding: '5px 14px', borderRadius: 4, fontSize: 12 }}
-                    >
-                        Export SRT
-                    </button>
-                    <button
-                        onClick={() => setShowSubSource(true)}
-                        style={{ background: 'var(--amber)', color: '#000', border: 'none', padding: '5px 14px', borderRadius: 4, fontSize: 12, fontWeight: 800 }}
-                    >
-                        ↑ SubSource
-                    </button>
-                    <button onClick={() => setShowShortcuts(true)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }} title="Keyboard Shortcuts (?)">
-                        <HelpCircle size={16} />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                            onClick={async () => {
+                                const res = await fetch(`${API}/api/projects/${id}/export`);
+                                const blob = await res.blob();
+                                const safeTitle = (currentProject?.title || 'subtitle').replace(/[^a-zA-Z0-9 _-]/g, '_').trim();
+                                const filename = `${safeTitle}_${currentProject?.lang_to || 'id'}.srt`;
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url; a.download = filename;
+                                document.body.appendChild(a); a.click();
+                                document.body.removeChild(a); URL.revokeObjectURL(url);
+                            }}
+                            style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px 12px', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-2)'; e.currentTarget.style.borderColor = 'var(--text-muted)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                        >
+                            EXPORT
+                        </button>
+                        <button
+                            onClick={() => setShowSubSource(true)}
+                            style={{ background: 'var(--amber)', color: '#000', border: '1px solid var(--amber)', padding: '5px 12px', borderRadius: 4, fontSize: 11, fontWeight: 900, cursor: 'pointer', boxShadow: '0 0 15px rgba(245, 158, 11, 0.2)' }}
+                        >
+                            SUBSOURCE
+                        </button>
+                    </div>
                 </div>
-            </header>
+            </div>
 
-            <div style={{ display: 'flex', flex: 1, overflow: 'hidden', height: 'calc(100vh - 52px)' }}>
+            <div style={{ display: 'flex', flex: 1, overflow: 'hidden', height: 'calc(100vh - 86px)' }}>
                 {/* ── LEFT PANEL ── */}
                 <aside style={{ width: 260, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflowY: 'auto', flexShrink: 0, background: 'var(--bg-1)' }}>
                     {/* Isolated Viewfinder Component to prevent full-page re-renders on timeUpdate */}
-                    <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <Viewfinder
                             videoSrc={videoSrc}
                             videoRef={videoRef}
@@ -781,27 +811,30 @@ export default function EditorPage() {
                             activeTranslation={activeSegment?.translation}
                         />
                         {/* Playback-follow toggle: default ON, akan otomatis OFF jika user scroll manual saat video jalan */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                            <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 0.5 }}>
-                                Auto-follow editor ke video
-                            </span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: 11, color: '#fff', fontWeight: 700, letterSpacing: -0.2 }}>Auto-Scroll</span>
+                                <span style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 1 }}>Fokus ke baris aktif</span>
+                            </div>
                             <button
                                 onClick={() => setFollowPlayback(v => !v)}
                                 style={{
-                                    borderRadius: 999, border: '1px solid var(--border)', padding: '2px 8px',
-                                    fontSize: 10, display: 'flex', alignItems: 'center', gap: 6,
-                                    background: followPlayback ? 'var(--amber-dim)' : 'var(--bg-2)',
+                                    borderRadius: 30, border: '1px solid',
+                                    borderColor: followPlayback ? 'rgba(245, 158, 11, 0.3)' : 'var(--border)',
+                                    padding: '4px 10px', fontSize: 9, fontWeight: 800,
+                                    display: 'flex', alignItems: 'center', gap: 6,
+                                    background: followPlayback ? 'rgba(245, 158, 11, 0.08)' : 'var(--bg-2)',
                                     color: followPlayback ? 'var(--amber)' : 'var(--text-muted)',
-                                    cursor: 'pointer',
+                                    cursor: 'pointer', transition: 'all 0.2s',
+                                    textTransform: 'uppercase', letterSpacing: 0.5
                                 }}
                             >
-                                <span
-                                    style={{
-                                        width: 8, height: 8, borderRadius: '50%',
-                                        background: followPlayback ? 'var(--amber)' : 'var(--border)',
-                                    }}
-                                />
-                                {followPlayback ? 'ON (Ikuti video)' : 'OFF (Kontrol manual)'}
+                                <div style={{
+                                    width: 6, height: 6, borderRadius: '50%',
+                                    background: followPlayback ? 'var(--amber)' : '#52525b',
+                                    boxShadow: followPlayback ? '0 0 8px var(--amber)' : 'none'
+                                }} />
+                                {followPlayback ? 'Aktif' : 'Manual'}
                             </button>
                         </div>
                     </div>
@@ -868,6 +901,16 @@ export default function EditorPage() {
                                             </div>
                                         );
                                     })}
+
+                                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1, fontWeight: 700 }}>🤖 AI USAGE</span>
+                                            <span style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 800, fontFamily: 'var(--mono)' }}>{tokenUsage.toLocaleString()} tokens</span>
+                                        </div>
+                                        <p style={{ margin: 0, fontSize: 10, color: '#555', lineHeight: 1.4 }}>
+                                            Estimasi pemakaian token Gemini Pro untuk sesi ini. (Sangat murah, ~Rp0.05/klik)
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -931,7 +974,7 @@ export default function EditorPage() {
                                     </ul>
                                     <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Bulk Actions</h4>
                                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
-                                        <li><kbd style={kbd}>Space</kbd> <span style={{ float: 'right' }}>Toggle select</span></li>
+                                        <li><kbd style={kbd}>X</kbd> <span style={{ float: 'right' }}>Toggle select</span></li>
                                         <li><kbd style={kbd}>Shift+↑/↓</kbd> <span style={{ float: 'right' }}>Extend select</span></li>
                                         <li><kbd style={kbd}>Ctrl+A</kbd> <span style={{ float: 'right' }}>Select all visible</span></li>
                                         <li><kbd style={kbd}>Ctrl+Enter</kbd> <span style={{ float: 'right' }}>Approve selected</span></li>
@@ -957,6 +1000,7 @@ export default function EditorPage() {
                                     </ul>
                                     <h4 style={{ margin: '20px 0 10px', color: '#fff', fontSize: 13, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>Sync Media</h4>
                                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-muted)' }}>
+                                        <li><kbd style={kbd}>Space</kbd> <span style={{ float: 'right' }}>Play / Pause</span></li>
                                         <li style={{ opacity: videoSrc ? 1 : 0.5 }}>
                                             <kbd style={kbd}>[</kbd> <span style={{ float: 'right' }}>Set Time Start {!videoSrc && '(Media required)'}</span>
                                         </li>
@@ -1025,39 +1069,78 @@ export default function EditorPage() {
                 )
             }
 
+            {
+                videoSrc && activeSegId && (
+                    <div className="floating-timing-hub">
+                        <style>{`
+                            @keyframes slideUp {
+                                from { transform: translate(-50%, 40px); opacity: 0; }
+                                to { transform: translate(-50%, 0); opacity: 1; }
+                            }
+                            .floating-timing-hub {
+                                position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+                                background: rgba(12, 12, 14, 0.85); backdrop-filter: blur(14px);
+                                border: 1px solid rgba(245, 158, 11, 0.25); padding: 8px 8px 8px 16px;
+                                border-radius: 100px; display: flex; align-items: center; gap: 12px;
+                                box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 20px rgba(245, 158, 11, 0.05);
+                                z-index: 900; animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+                                user-select: none;
+                            }
+                            .hub-btn {
+                                display: flex; align-items: center; gap: 8px;
+                                padding: 8px 16px; border-radius: 100px; background: #1e1e22;
+                                border: 1px solid #27272a; color: #a1a1aa; cursor: pointer;
+                                transition: all 0.2s; font-size: 11px; font-weight: 700;
+                            }
+                            .hub-btn:hover { background: #27272a; color: #fff; border-color: #3f3f46; transform: translateY(-1px); }
+                            .hub-btn.active { color: var(--amber); border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); }
+                            .hub-btn.active:hover { background: rgba(245, 158, 11, 0.12); }
+                            .hub-pulse {
+                                width: 8px; height: 8px; border-radius: 50%;
+                                background: var(--amber); box-shadow: 0 0 10px var(--amber);
+                                animation: hub-pulse 1.5s infinite;
+                            }
+                            @keyframes hub-pulse {
+                                0% { transform: scale(1); opacity: 0.8; }
+                                50% { transform: scale(1.3); opacity: 1; }
+                                100% { transform: scale(1); opacity: 0.8; }
+                            }
+                        `}</style>
+
+                        {/* Playhead Info */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 12, borderRight: '1px solid #27272a' }}>
+                            <div className={isPlaying ? 'hub-pulse' : ''} style={{ width: 8, height: 8, borderRadius: '50%', background: isPlaying ? 'var(--amber)' : '#3f3f46' }} />
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: 13, fontWeight: 900, color: '#fff', fontFamily: 'var(--mono)', lineHeight: 1 }}>
+                                    {videoRef.current ? fmtTime(videoRef.current.currentTime) : '00:00:00'}
+                                </span>
+                                <span style={{ fontSize: 8, fontWeight: 700, color: '#52525b', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 }}>PLAYHEAD</span>
+                            </div>
+                        </div>
+
+                        {/* Punch Actions */}
+                        <button className="hub-btn active" onClick={() => useSubtiStore.getState().updateTimecode(activeSegId, 'start', videoRef.current.currentTime)}>
+                            <ArrowLeftToLine size={15} /> SET START [
+                        </button>
+                        <button className="hub-btn active" onClick={() => useSubtiStore.getState().updateTimecode(activeSegId, 'end', videoRef.current.currentTime)}>
+                            <ArrowRightToLine size={15} /> SET END ]
+                        </button>
+
+                        <div style={{ width: 1, height: 24, background: '#27272a', margin: '0 4px' }} />
+
+                        {/* Jump Action */}
+                        <button className="hub-btn" onClick={() => { if (activeSegment) videoRef.current.currentTime = timecodeToSeconds(activeSegment.timecode_start); }}>
+                            <Target size={15} /> JUMP TO SEGMENT
+                        </button>
+                    </div>
+                )
+            }
             {showFindReplace && <FindReplaceModal onClose={() => setShowFindReplace(false)} />}
             {
                 flaggingId && flaggingSeg && (
                     <FlagModal segId={flaggingId} initialNote={flaggingSeg.flag_note} onClose={() => setFlaggingId(null)} />
                 )
             }
-
-            {/* CONTEXT MENU */}
-            <Menu id="seg-menu" theme="dark" style={{
-                fontSize: 13,
-                '--contexify-menu-bgColor': '#1a1a1c',
-                '--contexify-separator-color': '#2a2a2e',
-                '--contexify-item-color': '#c0c0cc',
-                '--contexify-activeItem-bgColor': '#28282c',
-                '--contexify-activeItem-color': '#fff',
-                border: '1px solid #2a2a2e',
-                borderRadius: 8,
-                boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
-            }}>
-                <Item id="translate" onClick={handleContextItemClick}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--amber)', fontWeight: 600 }}>
-                        <Wand2 size={14} />
-                        Translate Teks Ini
-                    </div>
-                </Item>
-                <Separator />
-                <Item id="clear" onClick={handleContextItemClick}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--red)' }}>
-                        <Trash2 size={14} />
-                        Hapus Teks
-                    </div>
-                </Item>
-            </Menu>
         </div>
     );
 }
@@ -1171,23 +1254,60 @@ const Viewfinder = memo(({
 
             {
                 videoSrc && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <button onClick={togglePlay} style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-border)', color: 'var(--amber)', width: 28, height: 28, borderRadius: '50%', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', paddingLeft: isPlaying ? 0 : 2 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 2 }}>
+                        {/* Transport Row: Rewind | Play/Pause | Forward */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                            <button
+                                onClick={() => { if (videoRef.current) videoRef.current.currentTime -= 5; }}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                title="Back 5s"
+                            >
+                                <SkipBack size={18} />
+                            </button>
+
+                            <button onClick={togglePlay} style={{
+                                background: 'var(--amber)', color: '#000', border: 'none',
+                                width: 42, height: 42, borderRadius: '50%', fontSize: 16,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.2s', flexShrink: 0, cursor: 'pointer',
+                                boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)',
+                                paddingLeft: isPlaying ? 0 : 3
+                            }}>
                                 {isPlaying ? '⏸' : '▶'}
                             </button>
+
+                            <button
+                                onClick={() => { if (videoRef.current) videoRef.current.currentTime += 5; }}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                title="Forward 5s"
+                            >
+                                <SkipForward size={18} />
+                            </button>
+                        </div>
+
+                        {/* Seeker Row */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <div title="Seek Video" onClick={e => {
                                 if (!videoRef.current) return;
                                 const rect = e.currentTarget.getBoundingClientRect();
                                 const pct = (e.clientX - rect.left) / rect.width;
                                 videoRef.current.currentTime = pct * videoRef.current.duration;
-                            }} style={{ flex: 1, height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
-                                <div style={{ height: '100%', background: 'var(--amber)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
+                            }} style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+                                <div style={{ height: '100%', background: 'linear-gradient(to right, var(--amber), #fbbf24)', width: `${videoRef.current?.duration ? (videoTime / videoRef.current.duration) * 100 : 0}%`, transition: 'width 0.1s linear' }} />
                             </div>
-                            <span style={{ fontSize: 10, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtTime(videoTime)}</span>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: 13, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums', fontWeight: 900, fontFamily: 'var(--mono)', letterSpacing: -0.5 }}>
+                                    {fmtTime(videoTime)}
+                                </span>
+                                <span style={{ fontSize: 10, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                                    {videoRef.current?.duration ? fmtTime(videoRef.current.duration) : '--:--:--'}
+                                </span>
+                            </div>
                         </div>
+
                         {/* Waveform Container */}
-                        <div ref={waveformRef} style={{ width: '100%', overflow: 'hidden', borderRadius: 4, background: '#111' }} />
+                        <div ref={waveformRef} style={{ width: '100%', overflow: 'hidden', borderRadius: 6, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)' }} />
                     </div>
                 )
             }

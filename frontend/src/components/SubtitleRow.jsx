@@ -1,7 +1,6 @@
 import { memo, useRef, useState, useEffect } from 'react';
-import { Flag, Check, Edit2, Eye, Wand2, Trash2 } from 'lucide-react';
+import { Flag, Check, Edit2, Eye, Wand2, Trash2, Scissors, Sparkles } from 'lucide-react';
 import useSubtiStore, { timecodeToSeconds } from '../store/useSubtiStore';
-import { useContextMenu } from 'react-contexify';
 
 const STATUS_CFG = {
     pending: { label: 'Pending', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
@@ -61,6 +60,7 @@ export default memo(function SubtitleRow({ seg }) {
     const approve = useSubtiStore(state => state.approve);
     const setInReview = useSubtiStore(state => state.setInReview);
     const setFlaggingId = useSubtiStore(state => state.setFlaggingId);
+    const unflag = useSubtiStore(state => state.unflag);
     const autoSaveEdit = useSubtiStore(state => state.autoSaveEdit);
 
     // Background Autosave (Debounced) - saves every 2s of typing idle
@@ -75,18 +75,19 @@ export default memo(function SubtitleRow({ seg }) {
     const cfg = STATUS_CFG[seg.status] || STATUS_CFG.pending;
     const isSkipped = seg.status === 'skipped';
     const [translatingLine, setTranslatingLine] = useState(false);
+    const hasAIKey = !!localStorage.getItem('gemini_key');
 
     const handleQuickTranslate = async (e) => {
         e.stopPropagation();
         if (translatingLine) return;
         setTranslatingLine(true);
         try {
-            const res = await useSubtiStore.getState().translateSnippet(seg.original);
-            if (res.success && res.translation) {
-                await useSubtiStore.getState().saveEditWithValue(seg.id, res.translation);
-                // Re-open for review
+            const res = await useSubtiStore.getState().retranslate(seg.id);
+            if (res.success) {
                 const updatedSeg = useSubtiStore.getState().segments.find(s => s.id === seg.id);
-                if (updatedSeg) useSubtiStore.getState().startEdit({ ...updatedSeg, translation: res.translation });
+                if (isEditing && updatedSeg) {
+                    useSubtiStore.getState().startEdit({ ...updatedSeg, translation: updatedSeg.translation });
+                }
             } else {
                 alert('Gagal translate baris: ' + (res.error || 'Unknown error'));
             }
@@ -106,10 +107,8 @@ export default memo(function SubtitleRow({ seg }) {
     const isLenDanger = origLen > 0 && (textLen / origLen) > 1.5;
     const isWarning = (isCpsDanger || isLenDanger) && !isSkipped;
 
-    const { show } = useContextMenu({ id: 'seg-menu' });
-
-    // Store selection here so right-click doesn't lose it
-    const selectionRef = useRef({ text: '', range: null });
+    const [popover, setPopover] = useState(null);
+    const [translatingSelection, setTranslatingSelection] = useState(false);
     const textareaRef = useRef(null);
     const caretRef = useRef({ start: null, end: null });
 
@@ -130,33 +129,55 @@ export default memo(function SubtitleRow({ seg }) {
         updateCaret(ta);
 
         if (start !== end) {
-            selectionRef.current = {
+            setPopover({
                 text: ta.value.substring(start, end),
-                range: { start, end },
-            };
+                start,
+                end,
+            });
         } else {
-            selectionRef.current = { text: '', range: null };
+            setPopover(null);
         }
     };
 
-    const handleContextMenu = (e) => {
+    const handleRefine = async (e, action) => {
         e.preventDefault();
-        // Re-read selection from textarea directly if still available
-        if (isEditing && e.target.tagName === 'TEXTAREA') {
-            captureSelection(e.target);
-        }
-        // Snapshot editValue NOW before blur/saveEdit can clear it
-        const editValueSnapshot = isEditing ? useSubtiStore.getState().editValue : null;
-        show({
-            event: e,
-            props: {
-                seg,
-                textSelection: selectionRef.current.text,
-                range: selectionRef.current.range,
-                editValueSnapshot,
+        e.stopPropagation();
+        if (!popover || translatingSelection) return;
+        setTranslatingSelection(true);
+        try {
+            const res = await useSubtiStore.getState().refineSnippet(popover.text, seg.original, action);
+            if (res.success && res.translation) {
+                const editValueSnapshot = useSubtiStore.getState().editValue;
+                const newText =
+                    editValueSnapshot.substring(0, popover.start) +
+                    res.translation +
+                    editValueSnapshot.substring(popover.end);
+
+                await useSubtiStore.getState().saveEditWithValue(seg.id, newText);
+
+                const updatedSeg = useSubtiStore.getState().segments.find(s => s.id === seg.id);
+                if (updatedSeg) {
+                    useSubtiStore.getState().startEdit({ ...updatedSeg, translation: newText });
+                }
+                setPopover(null);
+            } else {
+                alert('Gagal: ' + (res.error || 'Terjadi kesalahan tidak dikenal.'));
             }
-        });
+        } finally {
+            setTranslatingSelection(false);
+        }
     };
+
+    // Fix: Force cursor to the end when editing starts
+    useEffect(() => {
+        if (isEditing && textareaRef.current) {
+            const ta = textareaRef.current;
+            // Native autoFocus sometimes puts cursor at start, we force it to end
+            const len = ta.value.length;
+            ta.setSelectionRange(len, len);
+            ta.focus();
+        }
+    }, [isEditing]);
 
     // Debug caret position vs text changes (tanpa memaksa posisi, supaya tidak mengganggu browser)
     useEffect(() => {
@@ -196,11 +217,6 @@ export default memo(function SubtitleRow({ seg }) {
             <div
                 id={`seg-${seg.id}`}
                 onClick={() => setActiveSegId(seg.id)}
-                onContextMenu={handleContextMenu}
-                onMouseDown={(e) => {
-                    // Prevent blur on right-click so selection stays in textarea
-                    if (e.button === 2) e.preventDefault();
-                }}
                 style={{
                     display: 'flex', alignItems: 'flex-start', gap: 12,
                     padding: '10px 16px', borderBottom: '1px solid #141416',
@@ -208,12 +224,12 @@ export default memo(function SubtitleRow({ seg }) {
                     background: isSelected
                         ? 'var(--blue-dim)'
                         : isActive
-                            ? 'rgba(245,158,11,0.05)'
+                            ? 'rgba(245,158,11,0.12)'
                             : isWarning
                                 ? 'rgba(239,68,68,0.02)'
                                 : 'transparent',
                     borderLeft: isActive
-                        ? '2px solid var(--amber)'
+                        ? '4px solid var(--amber)'
                         : isSelected
                             ? '2px solid var(--blue)'
                             : isWarning
@@ -227,6 +243,7 @@ export default memo(function SubtitleRow({ seg }) {
                                             : seg.status === 'ai_done'
                                                 ? '2px solid rgba(245,158,11,0.3)'
                                                 : '2px solid transparent',
+                    boxShadow: isActive ? 'inset 10px 0 20px -10px rgba(245,158,11,0.1)' : 'none',
                     opacity: isSkipped ? 0.4 : seg.status === 'approved' ? 0.65 : 1,
                 }}
             >
@@ -271,11 +288,118 @@ export default memo(function SubtitleRow({ seg }) {
                 </div>
 
                 {/* Translation — double-click to edit */}
-                <div style={{ flex: 1, minWidth: 0 }} onDoubleClick={() => startEdit(seg)}>
+                <div style={{ flex: 1, minWidth: 0, position: 'relative' }} onDoubleClick={() => startEdit(seg)}>
+                    {isEditing && popover ? (
+                        <div style={{
+                            position: 'absolute',
+                            top: -42,
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            background: '#1a1a1c',
+                            border: '1px solid #3f3f46',
+                            borderRadius: '6px',
+                            padding: '4px',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05)',
+                            display: 'flex',
+                            gap: 4,
+                            zIndex: 50,
+                            whiteSpace: 'nowrap',
+                            animation: 'slideUp 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
+                        }}>
+                            <style>{`
+                                @keyframes slideUp {
+                                    from { opacity: 0; transform: translate(-50%, 4px) scale(0.96); }
+                                    to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+                                }
+                                .popover-btn {
+                                    background: transparent;
+                                    border: none;
+                                    color: #a1a1aa;
+                                    font-size: 13px;
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 6px;
+                                    padding: 6px 10px;
+                                    border-radius: 4px;
+                                    font-family: var(--sans);
+                                    font-weight: 500;
+                                    cursor: pointer;
+                                    transition: all 0.15s ease;
+                                }
+                                .popover-btn:hover:not(:disabled) {
+                                    background: #27272a;
+                                    color: #fff;
+                                }
+                                .popover-btn.ai-btn:hover:not(:disabled) {
+                                    background: rgba(245, 158, 11, 0.15);
+                                    color: var(--amber);
+                                }
+                                .popover-btn:disabled {
+                                    opacity: 0.5;
+                                    cursor: wait;
+                                }
+                            `}</style>
+                            <button
+                                onMouseDown={(e) => handleRefine(e, 'shorten')}
+                                disabled={translatingSelection}
+                                className="popover-btn ai-btn"
+                                title="Perpendek durasi teks berdasarkan CPS Netflix"
+                            >
+                                {translatingSelection ? (
+                                    <span style={{
+                                        display: 'inline-block', width: 12, height: 12,
+                                        border: '2px solid currentColor', borderTopColor: 'transparent',
+                                        borderRadius: '50%', animation: 'spin 0.7s linear infinite',
+                                    }} />
+                                ) : (
+                                    <Scissors size={14} />
+                                )}
+                                Shorten
+                            </button>
+                            <div style={{ width: 1, background: '#3f3f46', margin: '4px 2px' }} />
+                            <button
+                                onMouseDown={(e) => handleRefine(e, 'rephrase')}
+                                disabled={translatingSelection}
+                                className="popover-btn ai-btn"
+                                title="Rephrase bahasa agar lebih natural (genre matched)"
+                            >
+                                {translatingSelection ? (
+                                    <span style={{
+                                        display: 'inline-block', width: 12, height: 12,
+                                        border: '2px solid currentColor', borderTopColor: 'transparent',
+                                        borderRadius: '50%', animation: 'spin 0.7s linear infinite',
+                                    }} />
+                                ) : (
+                                    <Sparkles size={14} />
+                                )}
+                                Rephrase
+                            </button>
+                            <div style={{ width: 1, background: '#3f3f46', margin: '4px 2px' }} />
+                            <button
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const editValueSnapshot = useSubtiStore.getState().editValue;
+                                    const newText =
+                                        editValueSnapshot.substring(0, popover.start) +
+                                        editValueSnapshot.substring(popover.end);
+                                    useSubtiStore.getState().saveEditWithValue(seg.id, newText);
+                                    const updatedSeg = useSubtiStore.getState().segments.find(s => s.id === seg.id);
+                                    if (updatedSeg) {
+                                        useSubtiStore.getState().startEdit({ ...updatedSeg, translation: newText });
+                                    }
+                                    setPopover(null);
+                                }}
+                                className="popover-btn"
+                                title="Delete Selection"
+                            >
+                                <Trash2 size={13} strokeWidth={2.5} />
+                            </button>
+                        </div>
+                    ) : null}
                     {isEditing ? (
                         <textarea
                             ref={textareaRef}
-                            autoFocus
                             defaultValue={editValue}
                             onChange={e => {
                                 updateCaret(e.target);
@@ -283,10 +407,9 @@ export default memo(function SubtitleRow({ seg }) {
                             }}
                             onMouseUp={e => captureSelection(e.target)}
                             onSelect={e => captureSelection(e.target)}
-                            onBlur={() => saveEdit(seg.id)}
-                            onContextMenu={e => {
-                                // Capture selection specifically on the textarea before the menu shows
-                                captureSelection(e.target);
+                            onBlur={() => {
+                                setPopover(null);
+                                saveEdit(seg.id);
                             }}
                             onKeyDown={e => {
                                 if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -358,8 +481,26 @@ export default memo(function SubtitleRow({ seg }) {
                                     dangerouslySetInnerHTML={{ __html: highlightGlossary(seg.translation, glossary).replace(/\n/g, '<br/>') }}
                                 />
                             ) : (
-                                <p style={{ margin: 0, color: 'rgba(245,158,11,0.45)', lineHeight: 1.5, fontStyle: 'italic', fontSize: 13 }}>
-                                    ✦ belum ditranslate
+                                <p style={{
+                                    margin: 0,
+                                    color: translatingLine ? 'var(--amber)' : 'rgba(245,158,11,0.45)',
+                                    lineHeight: 1.5,
+                                    fontStyle: 'italic',
+                                    fontSize: 14, // Matches actual text size
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    animation: translatingLine ? 'shimmer 1.5s infinite' : 'none',
+                                    minHeight: 21
+                                }}>
+                                    {translatingLine ? (
+                                        <>
+                                            <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>✦</span>
+                                            AI sedang merangkai kalimat...
+                                        </>
+                                    ) : (
+                                        <>✦ belum ditranslate</>
+                                    )}
                                 </p>
                             )}
                             {seg.flag_note && (
@@ -382,11 +523,25 @@ export default memo(function SubtitleRow({ seg }) {
                         }}>
                             ♪ Skipped
                         </span>
+                    ) : translatingLine ? (
+                        <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '3px 8px', borderRadius: 3, fontSize: 12,
+                            background: 'rgba(245, 158, 11, 0.15)', color: 'var(--amber)',
+                            fontWeight: 600, animation: 'shimmer 1.5s infinite',
+                            border: '1px solid var(--amber-border)',
+                            height: 22, boxSizing: 'border-box',
+                            textTransform: 'uppercase', letterSpacing: '0.5px'
+                        }}>
+                            <span style={{ display: 'inline-block', animation: 'spin 1.5s linear infinite' }}>✦</span>
+                            Thinking
+                        </span>
                     ) : (
                         <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
                             padding: '3px 8px', borderRadius: 3, fontSize: 12,
                             background: cfg.bg, color: cfg.color,
+                            height: 22, boxSizing: 'border-box'
                         }}>
                             <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
                             {cfg.label}
@@ -405,7 +560,7 @@ export default memo(function SubtitleRow({ seg }) {
                     {/* Quick Translate: hanya tampil jika belum approved/skipped */}
                     {seg.status !== 'skipped' && (
                         <ActionBtn
-                            title={translatingLine ? 'Menerjemahkan...' : 'Terjemahkan baris ini (Google)'}
+                            title={translatingLine ? 'Sedang menerjemahkan...' : `Menerjemahkan baris ini (${hasAIKey ? 'AI Gemini' : 'Google Translate'})`}
                             onClick={handleQuickTranslate}
                             color="var(--amber)"
                             disabled={translatingLine}
@@ -426,7 +581,14 @@ export default memo(function SubtitleRow({ seg }) {
                         <ActionBtn title="Tandai In Review" onClick={() => setInReview(seg.id)} color="#8b5cf6"><Eye size={14} /></ActionBtn>
                     ) : <div style={{ width: 26, height: 26 }} />}
 
-                    <ActionBtn title="Flag" onClick={() => setFlaggingId(seg.id)} color="var(--red)"><Flag size={14} fill="currentColor" /></ActionBtn>
+                    <ActionBtn
+                        title={seg.status === 'flagged' ? "Unflag" : "Flag"}
+                        onClick={() => seg.status === 'flagged' ? unflag(seg.id) : setFlaggingId(seg.id)}
+                        color={seg.status === 'flagged' ? 'var(--text)' : 'var(--red)'}
+                        active={seg.status === 'flagged'}
+                    >
+                        <Flag size={14} fill={seg.status === 'flagged' ? "currentColor" : "none"} />
+                    </ActionBtn>
                 </div>
             </div>
 
