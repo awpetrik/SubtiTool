@@ -1,20 +1,23 @@
-# SubtiTool
-
 <div align="center">
-  <img width="600" alt="SubtiTool Banner" src="https://github.com/user-attachments/assets/b51bf567-3b00-44b6-865e-dba3f5f27b0f" />
-  <br><br>
-  <img width="800" alt="SubtiTool Screenshot" src="https://github.com/user-attachments/assets/b4eb51df-3fff-48c7-a8a4-8038af5e35c3" />
+  <img src="https://github.com/user-attachments/assets/b51bf567-3b00-44b6-865e-dba3f5f27b0f" width="480" alt="SubtiTool Logo" />
+  <p align="center">
+    <strong>An AI-powered subtitle translation and localization platform designed for professional workflows.</strong><br>
+    SubtiTool prioritizes precision, speed, and contextual awareness through a core-centric interface.
+  </p>
+
+  <div align="center">
+    <img src="https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB" />
+    <img src="https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white" />
+    <img src="https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54" />
+    <img src="https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi" />
+    <img src="https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white" />
+  </div>
+
+  <br>
+  <img src="https://github.com/user-attachments/assets/b4eb51df-3fff-48c7-a8a4-8038af5e35c3" width="90%" alt="SubtiTool Dashboard Preview" style="border-radius: 10px; border: 1px solid #333;" />
 </div>
 
 <br>
-
-An AI-powered subtitle translation and localization platform designed for professional workflows. SubtiTool prioritizes precision, speed, and contextual awareness through a keyboard-centric interface and advanced engine integration.
-
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
-![SQLite](https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white)
 
 ---
 
