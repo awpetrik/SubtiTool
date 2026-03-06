@@ -35,6 +35,7 @@
   - [Translation Workflow](#translation-workflow)
   - [Editor Controls](#editor-controls)
   - [AI-Assisted Refinement](#ai-assisted-refinement)
+- [AI Localization Engine](#ai-localization-engine)
 - [Project Portability (.stproj)](#project-portability-stproj)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Media Handling](#media-handling)
@@ -138,6 +139,24 @@ SubtiTool is a specialized environment for subtitle translation that bridges the
 - A floating AI menu will appear.
 - Select **Shorten** to reduce text length while maintaining meaning.
 - Select **Rephrase** to improve natural flow based on the project context.
+
+---
+
+## AI Localization Engine
+
+SubtiTool utilizes Google's Gemini Pro models with a specialized orchestration layer to achieve human-like localization accuracy. Unlike standard machine translation, our engine operates through several key technical layers:
+
+### 1. Contextual Awareness Injection
+The engine is fed with high-level metadata before processing any segments. This includes the movie title, genre, character descriptions, and target audience tone. This allows the AI to distinguish between formal/informal address (e.g., *lo/gue* vs *saya/anda*) and maintain era-appropriate vocabulary.
+
+### 2. Temporal Continuity (Batching with Overlap)
+To prevent "translation amnesia," where pronouns or subplots are forgotten between rows, SubtiTool processes subtitles in batches of 50 lines with a **5-line context overlap**. This ensures the model has a "short-term memory" of the previous dialogue exchange.
+
+### 3. Glossary & Terminology Enforcement
+User-defined glossary entries are injected into the system prompt with a "Mandatory Enforcement" instruction. This overrides the model's default dictionary, ensuring proprietary names, brand terms, or specific localization choices remain consistent across 100% of the project.
+
+### 4. Reading Speed Optimization (CPS)
+The engine is dynamically instructed to maintain a maximum of **17 Characters Per Second (CPS)**. If a translation is linguistically correct but too long for the segment's duration, the AI will automatically rephrase or condense the text into a more readable version without losing the core meaning.
 
 ---
 
