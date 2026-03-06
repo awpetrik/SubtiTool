@@ -677,7 +677,7 @@ export default function EditorPage() {
                         onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
                         onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     >
-                        <SubtiToolLogo size={20} color="#fff" />
+                        <SubtiToolLogo size={20} color="var(--amber)" />
                         <span style={{ fontSize: 16, color: 'var(--amber)', fontWeight: 800, fontFamily: 'var(--display)', letterSpacing: -0.5 }}>SubtiTool</span>
                     </div>
 

@@ -471,7 +471,7 @@ export default function UploadPage() {
                 {/* Header: brand */}
                 <div className="upload-left-header">
                     <div style={{ fontSize: 22, color: 'var(--amber)', fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: -0.5, display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <SubtiToolLogo size={24} /> SubtiTool
+                        <SubtiToolLogo size={24} color="var(--amber)" /> SubtiTool
                     </div>
                     <p style={{ color: '#3f3f46', margin: '3px 0 0', fontSize: 11 }}>{t.subtitleProcess}</p>
                 </div>
