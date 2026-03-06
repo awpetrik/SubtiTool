@@ -1,198 +1,177 @@
 # SubtiTool
 
-> **⚠️ WARNING: WORK IN PROGRESS**  
-> SubtiTool is currently in active early-stage development. It is **not fully functional yet** and you may encounter bugs, incomplete features, or breaking changes. Use at your own risk!
+An AI-powered subtitle translation and localization platform designed for professional workflows. SubtiTool prioritizes precision, speed, and contextual awareness through a keyboard-centric interface and advanced engine integration.
 
-<div align="center">
-<img width="1080" height="250" alt="Subtitool" src="https://github.com/user-attachments/assets/b51bf567-3b00-44b6-865e-dba3f5f27b0f" />
-</div>
+---
 
-<div align="center">
-  <br>
-  <img width="1423" height="799" alt="image" src="https://github.com/user-attachments/assets/b4eb51df-3fff-48c7-a8a4-8038af5e35c3" />
-  <br>
-  <br>
-</div>
+## Table of Contents
 
-An AI-powered subtitle translator and keyboard-centric editor designed to streamline localization workflows. Built for professional subtitlers who need speed, context-awareness, and reliability.
+- [Introduction](#introduction)
+- [Key Features](#key-features)
+- [System Architecture](#system-architecture)
+- [Technical Stack](#technical-stack)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Usage Guide](#usage-guide)
+  - [Project Creation](#project-creation)
+  - [Translation Workflow](#translation-workflow)
+  - [Editor Controls](#editor-controls)
+  - [AI-Assisted Refinement](#ai-assisted-refinement)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Media Handling](#media-handling)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
 
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
-![SQLite](https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white)
+---
 
-## Features
+## Introduction
 
-**Translation**
-- Multiple translation engines: Gemini AI (semantic), Google Translate (free), LibreTranslate (self-hosted), and full Manual mode
-- Batch processing with overlap context to maintain narrative coherence across segments
-- Per-line retry with exponential backoff and automatic fallback on engine failure
-- Resume interrupted translation jobs without losing progress
-- Inline retranslation of individual segments with optional hint context
+SubtiTool is a specialized environment for subtitle translation that bridges the gap between raw machine translation and professional human refinement. It utilizes Large Language Models (LLMs) like Gemini Pro to maintain narrative flow across segments while providing a high-performance virtualized editor for massive subtitle files.
 
-**Editor**
-- Virtual scrolling architecture for infinite large subtitle project support without RAM bottleneck
-- Refined typography and readable UI tailored for desktop monitor viewing sizes
-- Keyboard-centric workflow with Vim-like navigation for zero-mouse operation
-- Status-based visual hierarchy: color-coded left borders indicate segment states
-- Context menu with right-click access to translate selection, retranslate, flag, skip, and copy actions
-- Inline text translation: select any text fragment and translate it directly in the editor
-- Undo history per segment
+## Key Features
 
-**Project Management**
-- Persistent project storage with SQLite, survives server restarts
-- Dashboard showing saved projects with progress rings, completion percentages, and time-since-last-edit
-- Project glossary enforcement with real-time term highlighting
-- Auto-save indicator with timestamp feedback
+### Advanced Translation
+- **Semantic Context Awareness**: Batch processing with overlapping segments ensures consistent terminology and tone throughout the project.
+- **Multi-Engine Support**: Integration with Gemini Pro, Google Translate, and LibreTranslate.
+- **Resilient Pipeline**: Per-line retries with exponential backoff and automatic failover mechanisms.
+- **Smart Retranslation**: Individual segment re-processing with custom hints or glossary enforcement.
 
-**Data Integrity**
-- Idempotent segment updates via PATCH with server-side validation of status transitions
-- Exponential backoff retry (3 attempts, 500ms/1s/2s) on all frontend write operations
-- Double-submit guard on project creation
-- Batch-isolated error handling: a failing translation batch does not abort the rest of the job
+### Precision Editor
+- **Virtualized Rendering**: Support for thousands of subtitle rows without performance degradation using a virtual scrolling architecture.
+- **Smart Timing Hub**: Floating action bar for real-time playhead "punch-in" to set start and end timecodes with frame accuracy.
+- **Auto-Scroll Synchronization**: Intelligent editor positioning that follows video playback to keep the active row centered.
+- **AI Snippet Refinement**: Direct integration to shorten or rephrase specific text selections via AI prompts tailored for Netflix-style CPS (Characters Per Second) standards.
 
-**Other**
-- SubSource overlay for looking up contextual information directly in the editor
-- Real-time SSE progress stream during background translation jobs
-- SRT export with original/translation comparison layout option
-- Skip detection for lyrics, sound effects, and non-translatable segments
+### Data Integrity
+- **ACID Compliant Storage**: Persistent project management using SQLite.
+- **Idempotent Operations**: Guarded state transitions to prevent duplicate actions or data race conditions.
+- **Offline Resilience**: Foreground auto-save with background sync status indicators.
 
-## Tech Stack
+---
 
-- **Frontend**: React 19, Vite, Zustand (selective state management), Vanilla CSS
-- **Backend**: Python 3.9+, FastAPI, SQLAlchemy (SQLite), BackgroundTasks
-- **AI Integration**: Google Generative AI (Gemini), `deep-translator` (Google Free)
-- **Streaming**: Server-Sent Events (SSE) for live progress updates
+## Technical Stack
+
+- **Frontend**: React 19, Zustand (State Management), Wavesurfer.js (Waveform Visualization), Vanilla CSS (Custom Design System).
+- **Backend**: Python 3.9+, FastAPI, SQLAlchemy, BackgroundTasks for asynchronous processing.
+- **Media**: FFmpeg integration for high-performance 480p video proxy generation.
+- **Database**: SQLite for lightweight, zero-configuration persistence.
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org) v18 or higher
-- [Python](https://www.python.org) 3.9 or higher
-- A Gemini API Key (optional, only needed for the Gemini AI engine)
+- Node.js version 18 or higher.
+- Python version 3.9 or higher.
+- FFmpeg installed on the system path (required for video proxy features).
+- Gemini API Key (recommended for advanced AI features).
 
 ### Installation
 
-1. **Clone the repository**
+1. Clone the repository:
    ```bash
    git clone https://github.com/awpetrik/SubtiTool.git
    cd SubtiTool
    ```
 
-2. **Set up the backend**
+2. Configure the Backend:
    ```bash
    cd backend
    python -m venv .venv
-
-   # Activate virtual environment
-   source .venv/bin/activate   # On Windows: .venv\Scripts\activate
-
-   # Install dependencies
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    pip install -r requirements.txt
-
-   # Start the FastAPI server (runs on port 8000)
-   uvicorn main:app --reload
+   uvicorn main:app --reload --port 8000
    ```
 
-3. **Set up the frontend**
+3. Configure the Frontend:
    ```bash
-   # Open a new terminal, from the repository root
-   cd frontend
-
-   # Install dependencies
+   cd ../frontend
    npm install
-
-   # Start the Vite development server (runs on port 5173)
    npm run dev
    ```
 
-4. Open your browser at `http://localhost:5173`
+---
 
-## Editor Shortcuts
+## Usage Guide
 
-Press `?` inside the editor to show the full shortcut reference panel.
+### Project Creation
+1. Navigate to the Dashboard.
+2. Upload a `.srt` file.
+3. Select the source and target languages.
+4. Input a project description to provide context for the AI engine (e.g., "Genre: Horror, Tone: Informal").
+5. Click "Create Project" to initiate the background translation process.
 
-### Navigation
+### Translation Workflow
+- Monitor live progress via the completion bar.
+- Segments will transition from `pending` to `ai_done` as they are processed.
+- Use the Filter sidebar to focus on specific states like `flagged` or `in_review`.
 
-| Key | Action |
-|-----|--------|
-| `J` / `K` or `Arrow Down` / `Arrow Up` | Move active row |
-| `Page Down` / `Page Up` | Jump 10 rows |
-| `G G` / `Shift + G` | Jump to first / last row |
+### Editor Controls
+- **Double-click** any translation cell to enter Edit Mode.
+- **Right-click** a segment to access the Context Menu for quick actions.
+- Use the **Smart Timing Hub** (appears at the bottom when a video is loaded) to sync timecodes with the video playhead.
 
-### Editing
+### AI-Assisted Refinement
+- Highlight a specific word or phrase in the translation cell.
+- A floating AI menu will appear.
+- Select **Shorten** to reduce text length while maintaining meaning.
+- Select **Rephrase** to improve natural flow based on the project context.
 
-| Key | Action |
-|-----|--------|
-| `Enter` / `F2` | Edit active row |
-| `Tab` (while editing) | Save and move to next row |
-| `Shift + Enter` | Save and stay on row |
-| `Esc` | Discard current edit |
+---
 
-### Actions
+## Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| `A` | Approve row |
-| `S` | Skip row (marks as non-translatable) |
-| `F` | Flag row for review |
-| `R` | Retranslate row via selected engine |
-| `U` | Undo last action on active segment |
-| `Ctrl + Z` | Global undo |
-| `Ctrl + Enter` | Bulk approve selected rows |
+Press `?` inside the editor for the full interactive shortcut reference.
 
-### Context Menu
+| Category | Key | Action |
+| --- | --- | --- |
+| Navigation | `J` / `K` | Move Active Row |
+| Navigation | `G G` / `G` | Jump to Start / End |
+| Playback | `Space` | Play / Pause Video |
+| Playback | `[` / `]` | Set Start / End Timecode (Active Row) |
+| Editing | `Enter` | Save and Move to Next |
+| Editing | `Tab` | Save and Edit Next |
+| Actions | `A` | Approve Segment |
+| Actions | `X` | Toggle Selection Mode |
 
-Right-click any segment to access: translate selection, retranslate row, copy original, flag, skip, and approve options.
+---
+
+## Media Handling
+
+SubtiTool generates specialized 480p H.264 video proxies for smooth playback during editing. 
+- Large video files will prompt a conversion request.
+- Proxy files are stored in `backend/temp_proxies` and served as static assets.
+- Cleaning the cache can be done manually or will occur according to server-side retention policies.
+
+---
 
 ## Project Structure
 
-```
+```text
 SubtiTool/
-  backend/
-    main.py                  FastAPI entry point
-    models/                  SQLAlchemy ORM models (Project, Segment, Glossary)
-    routers/
-      projects.py            CRUD for projects and segments
-      translate.py           Translation job management and SSE progress
-      export.py              SRT export endpoint
-      glossary.py            Glossary management
-    services/
-      engines/               Translation engine adapters (Gemini, Google, Libre)
-      srt_parser.py          SRT file parser
-  frontend/
-    src/
-      pages/
-        Upload.jsx           Project dashboard and creation form
-        Editor.jsx           Main editor view
-      components/
-        SubtitleRow.jsx      Individual segment row with editing and actions
-        SubtitleList.jsx     Virtualized segment list
-      store/
-        useSubtiStore.js     Zustand store with all editor state and actions
+├── backend/
+│   ├── main.py              # Application Entry Point
+│   ├── routers/             # API Endpoints (Project, Translate, Proxy)
+│   ├── services/            # Business Logic (Engines, Parsers, FFmpeg)
+│   └── database.db          # Persistence Layer
+├── frontend/
+│   ├── src/
+│   │   ├── pages/           # View Logic (Upload, Editor)
+│   │   ├── components/      # Reusable UI Elements
+│   │   └── store/           # Zustand Global State
+│   └── package.json         # Frontend Dependencies
+└── README.md                # Documentation
 ```
 
-## Segment Status Flow
-
-```
-pending -> ai_done -> in_review -> approved
-                   -> flagged   -> in_review -> approved
-pending -> skipped
-```
-
-- `pending`: not yet translated
-- `ai_done`: translated by engine, awaiting human review
-- `in_review`: marked for closer attention
-- `flagged`: has a note attached, needs resolution
-- `approved`: confirmed correct by the subtitler
-- `skipped`: intentionally left as-is (lyrics, SFX, non-dialogue)
+---
 
 ## Contributing
 
-Contributions, issues, and feature requests are welcome. Since the project is in active development, please open an issue first to discuss what you would like to change or implement.
+Please review the issue tracker before submitting pull requests. Ensure all code adheres to the existing SOLID and DRY principles established in the codebase.
 
 ## License
 
-This project is licensed under the GNU AFFERO GENERAL PUBLIC LICENSE.
+This project is licensed under the GNU Affero General Public License.
