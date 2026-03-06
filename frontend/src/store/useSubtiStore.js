@@ -497,8 +497,9 @@ const useSubtiStore = create((set, get) => ({
     if (res.ok) {
       const data = await res.json();
       const lastSegId = localStorage.getItem(`last_seg_${projectId}`);
-      const initialSegId = (lastSegId && data.segments.some(s => s.id === parseInt(lastSegId)))
-        ? parseInt(lastSegId)
+      // Use loose equality (==) for string comparison vs possible integers
+      const initialSegId = (lastSegId && data.segments.some(s => s.id == lastSegId))
+        ? Number(lastSegId)
         : (data.segments.length > 0 ? data.segments[0].id : null);
 
       set({

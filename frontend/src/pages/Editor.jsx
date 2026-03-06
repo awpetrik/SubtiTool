@@ -249,35 +249,22 @@ export default function EditorPage() {
 
     const flaggingSeg = flaggingId ? segments.find(s => s.id === flaggingId) : null;
 
+    const initialScrollRef = useRef(false);
+
     // Auto-scroll active row into view via virtual list
     useEffect(() => {
-        if (!followPlayback) return;
         if (activeIndex >= 0 && listRef.current) {
-            listRef.current.scrollToItem(activeIndex, 'center');
+            // Force scroll on initial mount once data is ready
+            if (!initialScrollRef.current) {
+                listRef.current.scrollToItem(activeIndex, 'center');
+                initialScrollRef.current = true;
+                return;
+            }
 
-            // #region agent log
-            fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': '175f2f',
-                },
-                body: JSON.stringify({
-                    sessionId: '175f2f',
-                    runId: 'initial',
-                    hypothesisId: 'H3',
-                    location: 'frontend/src/pages/Editor.jsx:autoScrollEffect',
-                    message: 'Auto-scroll effect triggered',
-                    data: {
-                        activeSegId,
-                        activeIndex,
-                        hasListRef: !!listRef.current,
-                        followPlayback,
-                    },
-                    timestamp: Date.now(),
-                }),
-            }).catch(() => { });
-            // #endregion agent log
+            // Regular follow playback scroll
+            if (followPlayback) {
+                listRef.current.scrollToItem(activeIndex, 'center');
+            }
         }
     }, [activeSegId, activeIndex, followPlayback]);
 
@@ -457,31 +444,7 @@ export default function EditorPage() {
 
             const isEditing = useSubtiStore.getState().editingId !== null;
             if (currentSeg && currentSeg.id !== activeSegRef.current?.id && !isEditing) {
-                // #region agent log
-                fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Debug-Session-Id': '175f2f',
-                    },
-                    body: JSON.stringify({
-                        sessionId: '175f2f',
-                        runId: 'initial',
-                        hypothesisId: 'H2',
-                        location: 'frontend/src/pages/Editor.jsx:handleVideoTimeUpdate',
-                        message: 'Setting active segment from video time',
-                        data: {
-                            curTime,
-                            segId: currentSeg.id,
-                            start: currentSeg.start,
-                            end: currentSeg.end,
-                            prevActiveId: activeSegRef.current?.id ?? null,
-                            isEditing,
-                        },
-                        timestamp: Date.now(),
-                    }),
-                }).catch(() => { });
-                // #endregion agent log
+
 
                 useSubtiStore.getState().setActiveSegId(currentSeg.id);
             }
@@ -627,29 +590,7 @@ export default function EditorPage() {
         // Jika user scroll manual saat video sedang jalan, hormati kontrol user:
         // auto-follow dimatikan sementara, bisa diaktifkan lagi via toggle.
         if (!scrollUpdateWasRequested && isPlaying && followPlayback) {
-            // #region agent log
-            fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': '175f2f',
-                },
-                body: JSON.stringify({
-                    sessionId: '175f2f',
-                    runId: 'initial',
-                    hypothesisId: 'H4',
-                    location: 'frontend/src/pages/Editor.jsx:handleScroll',
-                    message: 'User scrolled manually while playing, disabling followPlayback',
-                    data: {
-                        scrollOffset,
-                        scrollDirection,
-                        scrollUpdateWasRequested,
-                        isPlaying,
-                    },
-                    timestamp: Date.now(),
-                }),
-            }).catch(() => { });
-            // #endregion agent log
+
 
             setFollowPlayback(false);
         }
@@ -1167,28 +1108,7 @@ const Viewfinder = memo(({
         if (!videoRef.current) return;
         const curTime = videoRef.current.currentTime;
         setVideoTime(curTime);
-        // #region agent log
-        fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': '175f2f',
-            },
-            body: JSON.stringify({
-                sessionId: '175f2f',
-                runId: 'initial',
-                hypothesisId: 'H1',
-                location: 'frontend/src/pages/Editor.jsx:internalTimeUpdate',
-                message: 'Video timeupdate fired',
-                data: {
-                    curTime,
-                    isPlaying,
-                    hasVideoRef: !!videoRef.current,
-                },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => { });
-        // #endregion agent log
+
         onTimeUpdate(curTime);
     };
     return (
