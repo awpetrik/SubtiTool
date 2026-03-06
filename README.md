@@ -1,5 +1,13 @@
 # SubtiTool
 
+<div align="center">
+  <img width="1080" height="250" alt="SubtiTool Banner" src="https://github.com/user-attachments/assets/b51bf567-3b00-44b6-865e-dba3f5f27b0f" />
+  <br>
+  <img width="1423" height="799" alt="SubtiTool Screenshot" src="https://github.com/user-attachments/assets/b4eb51df-3fff-48c7-a8a4-8038af5e35c3" />
+</div>
+
+<br>
+
 An AI-powered subtitle translation and localization platform designed for professional workflows. SubtiTool prioritizes precision, speed, and contextual awareness through a keyboard-centric interface and advanced engine integration.
 
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
