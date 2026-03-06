@@ -1,9 +1,9 @@
 # SubtiTool
 
 <div align="center">
-  <img width="1080" height="250" alt="SubtiTool Banner" src="https://github.com/user-attachments/assets/b51bf567-3b00-44b6-865e-dba3f5f27b0f" />
-  <br>
-  <img width="1423" height="799" alt="SubtiTool Screenshot" src="https://github.com/user-attachments/assets/b4eb51df-3fff-48c7-a8a4-8038af5e35c3" />
+  <img width="600" alt="SubtiTool Banner" src="https://github.com/user-attachments/assets/b51bf567-3b00-44b6-865e-dba3f5f27b0f" />
+  <br><br>
+  <img width="800" alt="SubtiTool Screenshot" src="https://github.com/user-attachments/assets/b4eb51df-3fff-48c7-a8a4-8038af5e35c3" />
 </div>
 
 <br>
