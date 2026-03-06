@@ -87,3 +87,18 @@ textarea:focus {
     transform: rotate(360deg);
   }
 }
+
+@keyframes shimmer {
+  0% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  }
+
+  100% {
+    opacity: 0.5;
+  }
+}

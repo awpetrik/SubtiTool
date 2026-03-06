@@ -476,6 +476,47 @@ export default function UploadPage() {
                     <p style={{ color: '#3f3f46', margin: '3px 0 0', fontSize: 11 }}>{t.subtitleProcess}</p>
                 </div>
 
+                {/* New Project / Upload Area */}
+                <div style={{ padding: '0 20px 20px', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: 1 }}>{t.fileLabel}</span>
+                    </div>
+
+                    {!file ? (
+                        <div
+                            className={`drop-zone ${dragOver ? 'active' : ''} ${fileError ? 'error' : ''}`}
+                            style={{ minHeight: 90, padding: '16px', gap: 12 }}
+                            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                            onDragLeave={() => setDragOver(false)}
+                            onDrop={handleDrop}
+                            onClick={() => fileRef.current?.click()}
+                        >
+                            <input ref={fileRef} type="file" accept=".srt" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
+                            <UploadCloud size={20} color={fileError ? '#ef4444' : 'var(--amber)'} style={{ flexShrink: 0, opacity: 0.8 }} />
+                            <div style={{ textAlign: 'center' }}>
+                                <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: '#fff' }}>{t.dragDrop1}</p>
+                                <p style={{ margin: 0, fontSize: 10, color: '#52525b' }}>{t.dragDrop2}</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid var(--amber)', borderRadius: 10, display: 'flex', alignItems: 'center', padding: '12px 14px', gap: 12 }}>
+                            <div style={{ background: 'var(--amber)', width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <FileText size={16} color="#000" />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</p>
+                                <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--amber)', opacity: 0.7 }}>~{lineCount} {t.lines} &middot; {(file.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                            <button type="button" onClick={() => { setFile(null); setFileError(''); }} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', padding: '6px', borderRadius: 6, color: '#ef4444', cursor: 'pointer', display: 'flex' }}>
+                                <Trash2 size={12} />
+                            </button>
+                        </div>
+                    )}
+                    {fileError && <p style={{ color: '#ef4444', fontSize: 10, margin: '8px 0 0', textAlign: 'center' }}>{fileError}</p>}
+                </div>
+
+                <div style={{ width: '100%', height: 1, background: '#111113' }} />
+
                 {/* Scrollable project list */}
                 <div className="upload-left-scroll">
                     {projects.length === 0 ? (
@@ -562,43 +603,21 @@ export default function UploadPage() {
                 </div>
             </div>
 
-            {/* ── RIGHT PANEL: always shows form ── */}
+            {/* ── RIGHT PANEL ── */}
             <div className="upload-right">
                 <form className="upload-form" onSubmit={handleSubmit}>
 
-                    {/* File Drop Zone */}
-                    <div>
-                        <label className="upload-label">{t.fileLabel}</label>
-                        {!file ? (
-                            <div
-                                className={`drop-zone ${dragOver ? 'active' : ''} ${fileError ? 'error' : ''}`}
-                                style={{ minHeight: 120, padding: '20px 24px', flexDirection: 'row', gap: 16 }}
-                                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                                onDragLeave={() => setDragOver(false)}
-                                onDrop={handleDrop}
-                                onClick={() => fileRef.current?.click()}
-                            >
-                                <input ref={fileRef} type="file" accept=".srt" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
-                                <UploadCloud size={24} color={fileError ? '#ef4444' : '#52525b'} style={{ flexShrink: 0 }} />
-                                <div>
-                                    <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#d4d4d8' }}>{t.dragDrop1}</p>
-                                    <p style={{ margin: 0, fontSize: 11, color: '#52525b' }}>{t.dragDrop2.replace('klik', '')} <span style={{ color: '#f59e0b', cursor: 'pointer' }}>{t.dragDrop2.includes('klik') ? 'klik ' + t.dragDrop2.split('klik ')[1] : t.dragDrop2}</span></p>
-                                    {fileError && <p style={{ color: '#ef4444', fontSize: 11, margin: '6px 0 0' }}>{fileError}</p>}
-                                </div>
-                            </div>
-                        ) : (
-                            <div style={{ background: '#0c0c0e', border: '1px solid #27272a', borderRadius: 8, display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 10 }}>
-                                <FileText size={16} color="#10b981" style={{ flexShrink: 0 }} />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <p style={{ margin: 0, fontSize: 13, color: '#e4e4e7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</p>
-                                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#52525b' }}>{(file.size / 1024).toFixed(1)} KB &middot; ~{lineCount} {t.lines}</p>
-                                </div>
-                                <button type="button" onClick={() => { setFile(null); setFileError(''); }} style={{ background: 'transparent', border: '1px solid #27272a', padding: '4px', borderRadius: 4, color: '#52525b', cursor: 'pointer', display: 'flex' }}>
-                                    <XCircle size={14} />
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    {/* Header: config title if file selected */}
+                    {file && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--amber)' }} />
+                            <h1 style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: 0, fontFamily: 'var(--display)' }}>
+                                {uiLang === 'en' ? 'CONFIGURE PROJECT' : 'KONFIGURASI PROYEK'}
+                            </h1>
+                        </div>
+                    )}
+
+
 
                     {/* Context Grid */}
                     <div className="upload-card">
@@ -798,7 +817,7 @@ export default function UploadPage() {
                 </form>
             </div>
 
-        </div>
+        </div >
     );
 }
 
