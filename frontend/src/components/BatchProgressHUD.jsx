@@ -1,15 +1,18 @@
-import React, { useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import useSubtiStore from '../store/useSubtiStore';
 import { Loader2, XOctagon } from 'lucide-react';
 
 export default function BatchProgressHUD() {
-    const { batchTranslating, batchProgress, abortBatchTranslate, listenBatchProgress, batchJobId } = useSubtiStore(s => ({
+    const {
+        batchTranslating, batchProgress, abortBatchTranslate,
+        listenBatchProgress, batchJobId
+    } = useSubtiStore(useShallow(s => ({
         batchTranslating: s.batchTranslating,
         batchProgress: s.batchProgress,
         abortBatchTranslate: s.abortBatchTranslate,
         listenBatchProgress: s.listenBatchProgress,
         batchJobId: s.batchJobId
-    }));
+    })));
 
     useEffect(() => {
         if (batchJobId && batchTranslating) {

@@ -67,6 +67,7 @@ const useSubtiStore = create((set, get) => ({
   batchJobId: null,
   batchTranslating: false,
   batchProgress: { processed: 0, total: 0, logs: [], status: 'idle', tokens: 0 },
+  tokenUsage: 0,
 
   // Keyboard navigation state
   selectedSegIds: new Set(),
@@ -624,9 +625,15 @@ const useSubtiStore = create((set, get) => ({
       // This is fired when a single segment or batch of segments is completed
       try {
         const updatedSegment = JSON.parse(e.data);
-        set(state => ({
-          segments: state.segments.map(s => s.id === updatedSegment.id ? updatedSegment : s)
-        }));
+        set(state => {
+          // Optimization: only update if segment actually exists and changed
+          const exists = state.segments.some(s => s.id == updatedSegment.id);
+          if (!exists) return state;
+
+          return {
+            segments: state.segments.map(s => s.id == updatedSegment.id ? updatedSegment : s)
+          };
+        });
       } catch (err) { /* ignore */ }
     });
 
