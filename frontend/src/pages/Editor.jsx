@@ -12,6 +12,9 @@ import FindReplaceModal from '../components/FindReplaceModal';
 import { ProjectToolbar } from '../components/ProjectToolbar';
 import WaveSurfer from 'wavesurfer.js';
 import { VariableSizeList } from 'react-window';
+import BatchTranslateModal from '../components/BatchTranslateModal';
+import BatchProgressHUD from '../components/BatchProgressHUD';
+
 
 const API = 'http://localhost:8001';
 
@@ -155,6 +158,7 @@ export default function EditorPage() {
     })));
 
     const [showSubSource, setShowSubSource] = useState(false);
+    const [showBatchModal, setShowBatchModal] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
 
     // Viewfinder Native Playback
@@ -734,9 +738,30 @@ export default function EditorPage() {
                         >
                             SUBSOURCE
                         </button>
+                        <button
+                            onClick={() => setShowBatchModal(true)}
+                            title="Auto-Translate Remaining Pending Segments"
+                            style={{
+                                background: 'rgba(245, 158, 11, 0.1)',
+                                border: '1px solid var(--amber)',
+                                color: 'var(--amber)',
+                                padding: '5px 10px',
+                                borderRadius: 4,
+                                fontSize: 11,
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6
+                            }}
+                        >
+                            <Wand2 size={13} fill="var(--amber)" />
+                            AUTO-TRANSLATE
+                        </button>
                     </div>
                 </div>
             </div>
+
 
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden', height: 'calc(100vh - 86px)' }}>
                 {/* ── LEFT PANEL ── */}
@@ -1087,6 +1112,8 @@ export default function EditorPage() {
                     <FlagModal segId={flaggingId} initialNote={flaggingSeg.flag_note} onClose={() => setFlaggingId(null)} />
                 )
             }
+            {showBatchModal && <BatchTranslateModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} />}
+            <BatchProgressHUD />
         </div>
     );
 }

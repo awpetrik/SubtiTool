@@ -64,6 +64,9 @@ const useSubtiStore = create((set, get) => ({
   isSaving: false,
   lastSaved: null,
   jobProgress: { processed: 0, total: 0, logs: [], status: 'idle' },
+  batchJobId: null,
+  batchTranslating: false,
+  batchProgress: { processed: 0, total: 0, logs: [], status: 'idle', tokens: 0 },
 
   // Keyboard navigation state
   selectedSegIds: new Set(),
@@ -569,6 +572,90 @@ const useSubtiStore = create((set, get) => ({
       es.close();
       set({ isTranslating: false });
     };
+  },
+
+  startBatchTranslate: async (config) => {
+    const { currentProject } = get();
+    if (!currentProject) return null;
+
+    set({
+      batchTranslating: true,
+      batchProgress: { processed: 0, total: 0, logs: [], status: 'starting', tokens: 0 }
+    });
+
+    // Config contains { engine, context_overlap, api_key }
+    const res = await fetch(`${API}/api/translate/${currentProject.id}/batch_pending`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to start batch translation' }));
+      set({
+        batchTranslating: false,
+        batchProgress: { processed: 0, total: 0, logs: [err.detail], status: 'error', tokens: 0 }
+      });
+      return null;
+    }
+
+    const data = await res.json();
+    set({ batchJobId: data.job_id });
+    return data.job_id;
+  },
+
+  listenBatchProgress: (jobId, onDone) => {
+    const es = new EventSource(`${API}/api/translate/${jobId}/progress`);
+
+    es.addEventListener('progress', (e) => {
+      const params = new URLSearchParams(e.data);
+      set(state => ({
+        batchProgress: {
+          ...state.batchProgress,
+          processed: parseInt(params.get('processed') || '0'),
+          total: parseInt(params.get('total') || '0'),
+          status: params.get('status'),
+          tokens: parseInt(params.get('tokens') || '0'),
+        }
+      }));
+    });
+
+    es.addEventListener('segment_done', (e) => {
+      // This is fired when a single segment or batch of segments is completed
+      try {
+        const updatedSegment = JSON.parse(e.data);
+        set(state => ({
+          segments: state.segments.map(s => s.id === updatedSegment.id ? updatedSegment : s)
+        }));
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('done', () => {
+      es.close();
+      set({ batchTranslating: false, batchJobId: null });
+      if (onDone) onDone();
+    });
+
+    es.onmessage = (e) => {
+      set(state => ({
+        batchProgress: { ...state.batchProgress, logs: [...state.batchProgress.logs, e.data] }
+      }));
+    };
+
+    es.onerror = () => {
+      es.close();
+      set({ batchTranslating: false, batchJobId: null });
+    };
+
+    return () => es.close(); // Return a cleanup function
+  },
+
+  abortBatchTranslate: async () => {
+    const { batchJobId } = get();
+    if (!batchJobId) return;
+
+    await fetch(`${API}/api/translate/${batchJobId}/abort`, { method: 'POST' });
+    set({ batchTranslating: false, batchJobId: null });
   },
 
   getStats: () => {

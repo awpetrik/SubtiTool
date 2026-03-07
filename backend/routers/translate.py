@@ -29,6 +29,12 @@ class RetranslateRequest(BaseModel):
     gemini_api_key: Optional[str] = None
 
 
+class BatchTranslateRequest(BaseModel):
+    engine: str
+    context_overlap: int = 5
+    api_key: Optional[str] = None
+
+
 def _get_engine(engine_name: str, gemini_key: Optional[str]):
     if engine_name == "gemini":
         return GeminiEngine(api_key=gemini_key or "")
@@ -148,6 +154,62 @@ async def start_translate(
     return {"job_id": job_id, "project_id": project.id, "total": len(segments_data)}
 
 
+    return {"job_id": job_id, "project_id": project.id, "total": len(pending_segs)}
+
+
+@router.post("/{project_id}/batch_pending")
+async def batch_translate_pending(
+    project_id: int,
+    payload: BatchTranslateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project tidak ditemukan")
+
+    pending_segs = db.query(Segment).filter(
+        Segment.project_id == project_id, 
+        Segment.status == "pending"
+    ).order_by(Segment.index).all()
+    
+    if not pending_segs:
+        return {"job_id": None, "status": "no_pending"}
+
+    segments_data = [
+        {"index": s.index, "original": s.original, "timecode_start": s.timecode_start, "timecode_end": s.timecode_end} 
+        for s in pending_segs
+    ]
+
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {
+        "project_id": project.id,
+        "status": "running",
+        "processed": 0,
+        "total": len(segments_data),
+        "logs": [],
+        "finished_segments": [],
+        "tokens": 0,
+        "aborted": False,
+    }
+
+    background_tasks.add_task(
+        _run_translate_job,
+        job_id=job_id,
+        project_id=project.id,
+        segments_data=segments_data,
+        context={
+            "title": project.title, "genre": project.genre, 
+            "char_context": project.char_context,
+            "lang_from": project.lang_from, "lang_to": project.lang_to
+        },
+        engine_name=payload.engine,
+        gemini_key=payload.api_key or "",
+    )
+
+    return {"job_id": job_id, "total": len(segments_data)}
+
+
 @router.post("/{project_id}/resume")
 async def resume_translate(
     project_id: int,
@@ -173,6 +235,9 @@ async def resume_translate(
         "processed": 0,
         "total": len(pending_segs_for_job),
         "logs": [],
+        "finished_segments": [],
+        "tokens": 0,
+        "aborted": False,
     }
 
     background_tasks.add_task(
@@ -187,6 +252,15 @@ async def resume_translate(
     )
 
     return {"job_id": job_id, "project_id": project.id, "total": len(pending_segs)}
+
+
+@router.post("/{job_id}/abort")
+async def abort_job(job_id: str):
+    if job_id in _jobs:
+        _jobs[job_id]["aborted"] = True
+        _jobs[job_id]["status"] = "aborted"
+        return {"status": "ok"}
+    raise HTTPException(status_code=404, detail="Job tidak ditemukan")
 
 
 def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key):
@@ -228,11 +302,22 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
         failed_batches = []
 
         for i in range(0, len(lines), BATCH_SIZE):
+            if job.get("aborted"):
+                job["logs"].append("🛑 Job dibatalkan oleh pengguna.")
+                break
+
             context_start = max(0, i - OVERLAP)
             batch_lines = lines[context_start: i + BATCH_SIZE]
 
             try:
                 translated = await translate_engine.translate_batch(batch_lines, context, glossary)
+                
+                # Estimate tokens for the batch
+                batch_text = "".join(batch_lines)
+                trans_text = "".join(translated)
+                est_tokens = len(batch_text + trans_text) // 4 + 100
+                job["tokens"] = job.get("tokens", 0) + est_tokens
+
             except Exception as batch_err:
                 _logger.error(f"Batch {i // BATCH_SIZE + 1} gagal: {batch_err}")
                 failed_batches.append(i // BATCH_SIZE + 1)
@@ -243,23 +328,46 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
 
             if i > 0:
                 translated = translated[OVERLAP:]
+            
+            start_offset = len(all_translated)
             all_translated.extend(translated)
 
             for idx_offset, trans in enumerate(translated):
-                seg_index = (len(all_translated) - len(translated)) + idx_offset
+                seg_index = start_offset + idx_offset
                 if seg_index >= len(segments_data):
                     break
                 orig_seg = segments_data[seg_index]
-                db.query(Segment).filter(
+                
+                seg_obj = db.query(Segment).filter(
                     Segment.project_id == project_id,
                     Segment.index == orig_seg["index"]
-                ).update({"translation": trans, "status": "ai_done"})
+                ).first()
+                if seg_obj:
+                    seg_obj.translation = trans
+                    seg_obj.status = "ai_done"
+                    db.add(seg_obj)
+                    
+                    # Add to finished segments for real-time UI update via SSE
+                    # We convert to dict now to avoid detached session issues in SSE thread
+                    job.setdefault("finished_segments", []).append({
+                        "id": seg_obj.id,
+                        "index": seg_obj.index,
+                        "translation": seg_obj.translation,
+                        "status": seg_obj.status,
+                        "original": seg_obj.original,
+                        "timecode_start": seg_obj.timecode_start,
+                        "timecode_end": seg_obj.timecode_end
+                    })
 
             db.commit()
-            job["processed"] = min(len(all_translated), len(lines))
+            job["processed"] = min(len(all_translated), len(segments_data))
             job["logs"].append(f"Batch {i // BATCH_SIZE + 1}: {job['processed']}/{job['total']} baris selesai")
 
-        job["status"] = "done_partial" if failed_batches else "done"
+        if job.get("aborted"):
+             job["status"] = "aborted"
+        else:
+             job["status"] = "done_partial" if failed_batches else "done"
+        
         if failed_batches:
             job["error"] = f"Batch gagal: {failed_batches} — sisa berhasil disimpan"
     except Exception as e:
@@ -276,22 +384,31 @@ async def get_progress(job_id: str):
 
     async def event_stream():
         sent_logs = 0
+        sent_segments = 0
+        import json as _json
+        
         while True:
             job = _jobs.get(job_id, {})
             logs = job.get("logs", [])
+            finished = job.get("finished_segments", [])
 
             for log in logs[sent_logs:]:
                 yield f"data: {log}\n\n"
                 sent_logs += 1
 
+            for seg in finished[sent_segments:]:
+                yield f"event: segment_done\ndata: {_json.dumps(seg)}\n\n"
+                sent_segments += 1
+
             yield (
                 f"event: progress\n"
                 f"data: processed={job.get('processed', 0)}&"
                 f"total={job.get('total', 0)}&"
-                f"status={job.get('status', 'running')}\n\n"
+                f"status={job.get('status', 'running')}&"
+                f"tokens={job.get('tokens', 0)}\n\n"
             )
 
-            if job.get("status") in ("done", "done_partial", "error"):
+            if job.get("status") in ("done", "done_partial", "error", "aborted"):
                 yield f"event: done\ndata: status={job['status']}&error={job.get('error', '')}\n\n"
                 break
 
