@@ -184,32 +184,7 @@ export default memo(function SubtitleRow({ seg }) {
         if (!isEditing || !textareaRef.current) return;
         const ta = textareaRef.current;
 
-        // #region agent log
-        fetch('http://127.0.0.1:7691/ingest/32176010-f2ed-4b55-ad65-6f9ad75740a8', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': '175f2f',
-            },
-            body: JSON.stringify({
-                sessionId: '175f2f',
-                runId: 'initial',
-                hypothesisId: 'H5',
-                location: 'frontend/src/components/SubtitleRow.jsx:caretEffect',
-                message: 'Textarea rendered with caret position',
-                data: {
-                    segId: seg.id,
-                    valueLength: (editValue || '').length,
-                    selectionStart: ta.selectionStart,
-                    selectionEnd: ta.selectionEnd,
-                    storedStart: caretRef.current.start,
-                    storedEnd: caretRef.current.end,
-                    isFocused: document.activeElement === ta,
-                },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => { });
-        // #endregion agent log
+
     }, [editValue, isEditing, seg.id]);
 
     return (

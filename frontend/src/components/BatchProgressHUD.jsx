@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import useSubtiStore from '../store/useSubtiStore';
 import { Loader2, XOctagon } from 'lucide-react';

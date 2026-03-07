@@ -10,9 +10,19 @@ export default function BatchTranslateModal({ isOpen, onClose }) {
     const [contextOverlap, setContextOverlap] = useState(5);
 
     const pendingSegments = segments.filter(s => s.status === 'pending');
-
     const totalChars = pendingSegments.reduce((acc, curr) => acc + (curr.original ? curr.original.length : 0), 0);
-    const estimatedTokens = Math.ceil(totalChars / 4);
+
+    // Dynamic estimation based on context overlap
+    const BATCH_SIZE = 40;
+    const numBatches = Math.ceil(pendingSegments.length / BATCH_SIZE);
+    const avgChars = pendingSegments.length > 0 ? (totalChars / pendingSegments.length) : 0;
+    const overlapChars = (numBatches > 1) ? (numBatches - 1) * contextOverlap * avgChars : 0;
+    const systemPromptOverhead = numBatches * 250; // Context and instructions
+
+    const estimatedTokens = Math.ceil((totalChars + overlapChars) / 4) + systemPromptOverhead;
+
+    // Gemini 1.5 Flash approx cost: $0.15 per 1M tokens (blended input/output)
+    const estimatedCostUSD = (estimatedTokens / 1_000_000) * 0.15;
 
     if (!isOpen) return null;
 
@@ -103,9 +113,20 @@ export default function BatchTranslateModal({ isOpen, onClose }) {
 
                 {/* Token Estimation */}
                 {engine === 'gemini' && (
-                    <div style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', padding: 12, borderRadius: 6, marginBottom: 20 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 4 }}>ESTIMATED COST</div>
-                        <div style={{ fontSize: 14, color: '#fff' }}>~{estimatedTokens.toLocaleString()} <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Tokens per pass</span></div>
+                    <div style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', padding: '14px 16px', borderRadius: 8, marginBottom: 20 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--amber)', letterSpacing: 0.5 }}>ESTIMATED COST</div>
+                            <div style={{
+                                fontSize: 13, color: '#fff', fontWeight: 900, fontFamily: 'var(--mono)',
+                                padding: '2px 8px', background: 'var(--amber)', color: '#000', borderRadius: 4
+                            }}>
+                                ${estimatedCostUSD < 0.001 ? '<0.001' : estimatedCostUSD.toFixed(3)}
+                            </div>
+                        </div>
+                        <div style={{ fontSize: 14, color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            ~{estimatedTokens.toLocaleString()}
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Tokens (Est. Input+Output)</span>
+                        </div>
                     </div>
                 )}
 

@@ -164,6 +164,12 @@ async def batch_translate_pending(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    # Idempotency check: don't start a new job if one is already running for this project
+    for existing_job_id, job_info in _jobs.items():
+        if job_info.get("project_id") == project_id and job_info.get("status") == "running":
+            _logger.info(f"Returning existing job {existing_job_id} for project {project_id}")
+            return {"job_id": existing_job_id, "total": job_info.get("total", 0)}
+
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project tidak ditemukan")
@@ -205,6 +211,7 @@ async def batch_translate_pending(
         },
         engine_name=payload.engine,
         gemini_key=payload.api_key or "",
+        context_overlap=payload.context_overlap
     )
 
     return {"job_id": job_id, "total": len(segments_data)}
@@ -263,12 +270,12 @@ async def abort_job(job_id: str):
     raise HTTPException(status_code=404, detail="Job tidak ditemukan")
 
 
-def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key):
+def _run_translate_job(job_id, project_id, segments_data, context, engine_name, gemini_key, context_overlap=5):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(
-            _run_translate_job_async(job_id, project_id, segments_data, context, engine_name, gemini_key)
+            _run_translate_job_async(job_id, project_id, segments_data, context, engine_name, gemini_key, context_overlap)
         )
     except Exception as e:
         if job_id in _jobs:
@@ -278,7 +285,7 @@ def _run_translate_job(job_id, project_id, segments_data, context, engine_name, 
         loop.close()
 
 
-async def _run_translate_job_async(job_id, project_id, segments_data, context, engine_name, gemini_key):
+async def _run_translate_job_async(job_id, project_id, segments_data, context, engine_name, gemini_key, context_overlap=5):
     from db import SessionLocal
     db = SessionLocal()
     job = _jobs[job_id]
@@ -306,7 +313,7 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
                 job["logs"].append("🛑 Job dibatalkan oleh pengguna.")
                 break
 
-            context_start = max(0, i - OVERLAP)
+            context_start = max(0, i - context_overlap)
             batch_lines = lines[context_start: i + BATCH_SIZE]
 
             try:
@@ -322,12 +329,12 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
                 _logger.error(f"Batch {i // BATCH_SIZE + 1} gagal: {batch_err}")
                 failed_batches.append(i // BATCH_SIZE + 1)
                 # Fallback: isi dengan original text, jangan crash seluruh job
-                effective_batch = batch_lines[OVERLAP:] if i > 0 else batch_lines
-                translated = (batch_lines[:OVERLAP] if i > 0 else []) + effective_batch
+                effective_batch = batch_lines[context_overlap:] if i > 0 else batch_lines
+                translated = (batch_lines[:context_overlap] if i > 0 else []) + effective_batch
                 job["logs"].append(f"⚠ Batch {i // BATCH_SIZE + 1} gagal, lanjut batch berikutnya")
 
             if i > 0:
-                translated = translated[OVERLAP:]
+                translated = translated[context_overlap:]
             
             start_offset = len(all_translated)
             all_translated.extend(translated)
@@ -340,7 +347,8 @@ async def _run_translate_job_async(job_id, project_id, segments_data, context, e
                 
                 seg_obj = db.query(Segment).filter(
                     Segment.project_id == project_id,
-                    Segment.index == orig_seg["index"]
+                    Segment.index == orig_seg["index"],
+                    Segment.status == "pending"
                 ).first()
                 if seg_obj:
                     seg_obj.translation = trans
