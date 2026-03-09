@@ -144,7 +144,7 @@ SubtiTool is a specialized environment for subtitle translation that bridges the
 
 ## AI Localization Engine
 
-SubtiTool utilizes Google's Gemini Pro models with a specialized orchestration layer to achieve human-like localization accuracy. Unlike standard machine translation, our engine operates through several key technical layers:
+SubtiTool utilizes Google's Gemini API models with a specialized orchestration layer to achieve human-like localization accuracy. Unlike standard machine translation, our engine operates through several key technical layers:
 
 ### 1. Contextual Awareness Injection
 The engine is fed with high-level metadata before processing any segments. This includes the movie title, genre, character descriptions, and target audience tone. This allows the AI to distinguish between formal/informal address (e.g., *lo/gue* vs *saya/anda*) and maintain era-appropriate vocabulary.
