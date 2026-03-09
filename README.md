@@ -48,7 +48,7 @@
 
 ## Introduction
 
-SubtiTool is a specialized environment for subtitle translation that bridges the gap between raw machine translation and professional human refinement. It utilizes Large Language Models (LLMs) like Gemini Pro to maintain narrative flow across segments while providing a high-performance virtualized editor for massive subtitle files.
+SubtiTool is a specialized environment for subtitle translation that bridges the gap between raw machine translation and professional human refinement. It utilizes Large Language Models (LLMs) like Gemini API to maintain narrative flow across segments while providing a high-performance virtualized editor for massive subtitle files.
 
 ## Key Features
 
